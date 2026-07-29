@@ -11,6 +11,19 @@ def get_configure_list(us_between_transfer, bytes_for_transfer):
     config_base += [us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer & 0xFF]
     return config_base
 
+def read_exact(receiver, num_bytes, max_retries=20):
+    data = b''
+    while len(data) < num_bytes and max_retries > 0:
+        try:
+            chunk = receiver(num_bytes - len(data))
+        except:
+            chunk = b''
+        if chunk is None or len(chunk) == 0:
+            max_retries -= 1
+            continue
+        data += bytes(chunk)
+    return data
+
 def read_all(receiver, debug=False):
     time.sleep(0.01)
     output = 0
@@ -32,7 +45,7 @@ def read_all(receiver, debug=False):
         print("0x%02x " % output)
     return output
 
-def multiboot(receiver, sender, list_sender, path):
+def multiboot(receiver, sender, list_sender, path, configure=None):
     content = 0
     print("Preparing data...")
     content = bytearray(open(path, 'rb').read())
@@ -72,32 +85,40 @@ def multiboot(receiver, sender, list_sender, path):
     print("Data preloaded...")
     
     read_all(receiver)
-    config_base = get_configure_list(36, 4)
+    if configure is not None:
+        # GBLink 2.x firmware: configured through its command endpoint,
+        # so nothing is echoed back on the data stream here
+        configure(36, 4)
+    else:
+        config_base = get_configure_list(36, 4)
+        list_sender(config_base, chunk_size = len(config_base))
+        val = read_all(receiver)
 
-    list_sender(config_base, chunk_size = len(config_base))
-    val = read_all(receiver)
+    # Every transfer is echoed back: read each reply right away,
+    # the 2.x firmware can only hold one unread reply at a time
+    def transfer(word):
+        sender(word, 4)
+        if configure is not None:
+            return int.from_bytes(read_exact(receiver, 4), byteorder='big')
+        return read_all(receiver)
 
     recv = 0
     while True:
-        sender(0x6202, 4)
-        recv = read_all(receiver)
+        recv = transfer(0x6202)
         if (recv >> 16) == 0x7202:
             break
     print("Lets do this thing!")
-    sender(0x6102, 4)
+    transfer(0x6102)
 
     for i in range(96):
         out = (int(content[(i*2)])) + (int(content[(i*2)+1]) << 8)
-        sender(out, 4)
+        transfer(out)
 
-    sender(0x6200, 4)
-    sender(0x6200, 4)
-    sender(0x63D1, 4)
-    #Clear buffer
-    read_all(receiver)
+    transfer(0x6200)
+    transfer(0x6200)
+    transfer(0x63D1)
 
-    sender(0x63D1, 4)
-    token = read_all(receiver)
+    token = transfer(0x63D1)
     if ((token >> 24) & 0xFF) != 0x73:
         print("Failed handshake!")
         return
@@ -108,11 +129,9 @@ def multiboot(receiver, sender, list_sender, path):
     seed = 0xFFFF00D1 | (crcA << 8)
     crcA = (crcA + 0xF) & 0xFF
 
-    sender((0x6400 | crcA), 4)
-    read_all(receiver)
+    transfer(0x6400 | crcA)
 
-    sender((fsize - 0x190) // 4, 4)
-    token = read_all(receiver)
+    token = transfer((fsize - 0x190) // 4)
     crcB = (token >> 16) & 0xFF
     print(fsize)
     print("Sending data!")
@@ -125,7 +144,14 @@ def multiboot(receiver, sender, list_sender, path):
         complete_sending_data[(i*4)+3] = ((sending_data[i] ^ seed)>>0) & 0xFF
         
     time_transfer = time.time()
-    list_sender(complete_sending_data, chunk_size = max_packet_size_mb)
+    if configure is not None:
+        # 2.x firmware: read each chunk's echo back to not overrun its reply buffer
+        for i in range(0, len(complete_sending_data), max_packet_size_mb):
+            chunk = complete_sending_data[i:i+max_packet_size_mb]
+            list_sender(chunk, chunk_size = len(chunk))
+            read_exact(receiver, len(chunk))
+    else:
+        list_sender(complete_sending_data, chunk_size = max_packet_size_mb)
     time_transfer = time.time()-time_transfer
     print(time_transfer)
     
@@ -142,13 +168,12 @@ def multiboot(receiver, sender, list_sender, path):
         tmp >>= 1
 
     read_all(receiver)
-    sender(0x0065, 4)
+    transfer(0x0065)
     while True:
-        sender(0x0065, 4)
-        recv = read_all(receiver)
+        recv = transfer(0x0065)
         if ((recv >> 16) & 0xFFFF) == 0x0075:
             break
 
-    sender(0x0066, 4)
-    sender(crcC & 0xFFFF, 4)
+    transfer(0x0066)
+    transfer(crcC & 0xFFFF)
     print("DONE!")
