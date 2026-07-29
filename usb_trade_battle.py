@@ -15,6 +15,7 @@ reattach = False
 serial_port = None
 epIn = None
 epOut = None
+epCmd = None
 p = None
 max_usb_timeout_w = 5
 max_usb_timeout_r = 0.1
@@ -23,10 +24,27 @@ max_packet_size = 0x40
 VID = 0xcafe
 PID = 0x4011
 
+# GBLink 2.x firmware
+VID_2 = 0x2fe3
+PID_2 = 0x000a
+
 path = "pokemon_gen3_to_genx_mb.gba"
 
 def kill_function():
     os.kill(os.getpid(), signal.SIGINT)
+
+# The 2.x firmware is configured with commands on its own endpoint,
+# instead of the magic packet on the data endpoint
+def configure_fw2(us_between_transfer, bytes_for_transfer):
+    def cmd(data):
+        epCmd.write(bytes(data), timeout=int(max_usb_timeout_w * 1000))
+    if bytes_for_transfer == 4:
+        cmd([0x40])  # 3.3V for GBA
+    else:
+        cmd([0x41])  # 5V for GB/GBC
+    cmd([0x00, 0x02])  # set GB Link mode
+    time.sleep(0.1)  # give the mode time to start
+    cmd([0x30, us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer])  # timing config
 
 def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     menu = GSCTradingMenu(kill_function)
@@ -44,15 +62,20 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
         menu.gen = 3
 
     if menu.gen == 3:
-        config_base = multiboot.get_configure_list(1000, 4)
+        us_between_transfer, bytes_for_transfer = 1000, 4
     else:
-        config_base = multiboot.get_configure_list(1000, 1)
+        us_between_transfer, bytes_for_transfer = 1000, 1
 
     result = 1
     while result != 0:
         result = multiboot.read_all(raw_receiver)
-    list_sender(config_base, chunk_size=len(config_base))
-    ret = multiboot.read_all(raw_receiver)
+    if epCmd is not None:
+        configure_fw2(us_between_transfer, bytes_for_transfer)
+        ret = 1
+    else:
+        config_base = multiboot.get_configure_list(us_between_transfer, bytes_for_transfer)
+        list_sender(config_base, chunk_size=len(config_base))
+        ret = multiboot.read_all(raw_receiver)
 
     if is_serial and (ret != 1):
         print("WARNING: Firmware not recognized!\nWhen using Serial, you MUST use a firmware which doesn't alter the output!\nIt's best if you update to the one available at:\nhttps://github.com/Lorenzooone/gb-link-firmware-reconfigurable/releases")
@@ -65,7 +88,7 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
         pre_sleep = True
 
     if menu.multiboot:
-        multiboot.multiboot(raw_receiver, sender, list_sender, path)
+        multiboot.multiboot(raw_receiver, sender, list_sender, path, configure_fw2 if epCmd is not None else None)
         return
 
     trade_c = get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = pre_sleep)
@@ -215,14 +238,32 @@ def signal_handler(sig, frame):
     exit_gracefully()
 
 def libusb_method():
-    global dev, epIn, epOut, reattach
+    global dev, epIn, epOut, epCmd, reattach
     try:
         devices = list(usb.core.find(find_all=True,idVendor=VID, idProduct=PID))
         for d in devices:
             #print('Device: %s' % d.product)
             dev = d
         if dev is None:
-            return False
+            # Try the GBLink 2.x firmware
+            devices = list(usb.core.find(find_all=True,idVendor=VID_2, idProduct=PID_2))
+            for d in devices:
+                dev = d
+            if dev is None:
+                return False
+
+            cfg = dev.get_active_configuration()
+
+            intf = cfg[(0,0)]   # Vendor interface: EP 0x01 commands, EP 0x02/0x82 data
+
+            epCmd = usb.util.find_descriptor(intf, custom_match=lambda e: e.bEndpointAddress == 0x01)
+            epOut = usb.util.find_descriptor(intf, custom_match=lambda e: e.bEndpointAddress == 0x02)
+            epIn = usb.util.find_descriptor(intf, custom_match=lambda e: e.bEndpointAddress == 0x82)
+
+            assert epIn is not None
+            assert epOut is not None
+            assert epCmd is not None
+            return True
         reattach = False
         if(os.name != "nt"):
             if dev.is_kernel_driver_active(0):
