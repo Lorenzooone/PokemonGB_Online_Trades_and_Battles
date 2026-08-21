@@ -397,6 +397,20 @@ class GSCUtilsMisc:
     def write_short_le(data, pos, short_data):
         data[pos] = short_data & 0xFF
         data[pos+1] = (short_data >> 8) & 0xFF
+
+    def write_int_le_to_buffer(int_data):
+        data = []
+        for _ in range(4):
+            data += [0]
+        GSCUtilsMisc.write_int_le(data, 0, int_data)
+        return data
+
+    def write_short_le_to_buffer(short_data):
+        data = []
+        for _ in range(2):
+            data += [0]
+        GSCUtilsMisc.write_short_le(data, 0, short_data)
+        return data
     
     def to_n_bytes_le(in_data, n_bytes):
         data = [0] * n_bytes
@@ -450,7 +464,7 @@ class GSCUtilsMisc:
     def verbose_print(to_print, verbose, end='\n'):
         if verbose:
             print(to_print, end=end)
-    
+
 class GSCTradingText:
     """
     Class which contains a text entry from the trading data.
@@ -478,6 +492,14 @@ class GSCTradingText:
         if len(other) == len(self.values) or other[len(self.values)] == self.utils_class.end_of_line:
             return True
         return False
+
+    def create_from_string(string, length=0xB):
+        from .text_conversions import PokemonTextConversions
+        data = [self.utils_class.end_of_line] * length
+        min_length = min(length, len(string))
+        for i in range(min_length):
+            data[i] = PokemonTextConversions.convert_char_to_gen12_char(string[i]) & 0xFF
+        return GSCTradingText(data, 0, length=length)
     
 class GSCTradingPartyInfo:
     """
@@ -487,9 +509,12 @@ class GSCTradingPartyInfo:
     max_party_mons = 6
     
     def __init__(self, data, start):
-        self.total = data[start]
-        if self.total <= 0 or self.total > 6:
-            self.total = 1
+        # For debugging purposes
+        if data is None:
+            data = [0] * (self.max_party_mons + 1)
+            start = 0
+            data[0] = self.max_party_mons
+        self.set_total(data[start])
         self.actual_mons = data[start + 1:start + 1 + self.max_party_mons]
     
     def get_id(self, pos):
@@ -503,6 +528,11 @@ class GSCTradingPartyInfo:
     
     def get_total(self):
         return self.total
+    
+    def set_total(self, value):
+        self.total = value
+        if self.total <= 0 or self.total > 6:
+            self.total = 1
 
 class GSCTradingPokémonInfo:
     """
@@ -526,11 +556,17 @@ class GSCTradingPokémonInfo:
     ivs_pos = 0x15
     egg_cycles_pos = 0x1B
     status_pos = 0x20
+    ot_id_pos = 6
     
     no_moves_equality_ranges = [range(0,2), range(6,0x17), range(0x1B, pokemon_data_len)]
+    full_equality_ranges = [range(0, pokemon_data_len)]
     all_lengths = [pokemon_data_len, ot_name_len, nickname_len, mail_len, sender_len]
 
     def __init__(self, data, start, length=pokemon_data_len):
+        # For debugging purposes
+        if data is None:
+            data = [0] * length
+            start = 0
         self.values = data[start:start+length]
         self.mail = None
         self.mail_sender = None
@@ -546,6 +582,15 @@ class GSCTradingPokémonInfo:
 
     def add_ot_name(self, data, start):
         self.ot_name = self.text_class(data, start, length=self.ot_name_len)
+
+    def set_ot_name(self, name):
+        self.ot_name = self.text_class.create_from_string(name, length=self.ot_name_len)
+
+    def get_ot_id(self):
+        return GSCUtilsMisc.read_short(self.values, self.ot_id_pos)
+
+    def set_ot_id(self, num):
+        GSCUtilsMisc.write_short(self.values, self.ot_id_pos, num)
 
     def add_nickname(self, data, start):
         self.nickname = self.text_class(data, start, length=self.nickname_len)
@@ -623,6 +668,22 @@ class GSCTradingPokémonInfo:
     
     def get_pp(self, pos):
         return self.values[self.pps_pos + pos]
+
+    def get_max_pp(self, pos):
+        pp_ups = (self.get_pp(pos) >> 6) & 3
+        max_base_pp = self.utils_class.moves_pp_list[self.get_move(pos)]
+        pp_increment = math.floor(max_base_pp/5)
+        if max_base_pp == 40:
+            pp_increment -= 1
+        return max_base_pp + (pp_increment * pp_ups)
+
+    def heal_move(self, pos):
+        pp_ups = (self.get_pp(pos) >> 6) & 3
+        self.set_pp(pos, (self.get_max_pp(pos)) | (pp_ups << 6))
+
+    def heal_moves(self):
+        for i in range(4):
+            self.heal_move(i)
     
     def get_level(self):
         return self.values[self.level_pos]
@@ -669,6 +730,10 @@ class GSCTradingPokémonInfo:
         GSCUtilsMisc.write_short(self.values, self.curr_hp_pos, self.get_max_hp())
         self.values[self.status_pos] = 0
 
+    def full_heal(self):
+        self.heal()
+        self.heal_moves()
+
     def faint(self):
         GSCUtilsMisc.write_short(self.values, self.curr_hp_pos, 0)
         self.values[self.status_pos] = 0
@@ -679,8 +744,10 @@ class GSCTradingPokémonInfo:
     def has_mail(self):
         return self.utils_class.is_item_mail(self.get_item())
     
-    def is_equal(self, other, weak=False):
+    def is_equal(self, other, weak=False, all_values=False):
         ranges = self.no_moves_equality_ranges
+        if all_values:
+            ranges = self.full_equality_ranges
         for i in ranges:
             for j in i:
                 if self.values[j] != other.values[j]:
@@ -783,6 +850,22 @@ class GSCTradingPokémonInfo:
             mon.add_mail_sender(data, mon._precalced_lengths[4])
         return mon
 
+    def create_from_scratch(species = 1, item = 0, level = 2, moves = [1, 2, 3, 4], ot_name = "AAAAA", ot_id = 1):
+        """
+        Creates an entry from no data.
+        """
+        mon = GSCTradingPokémonInfo(None, 0)
+        mon.set_species(species)
+        mon.set_item(item)
+        mon.set_level(level)
+        for i in range(len(moves)):
+            mon.set_move(i, moves[i])
+        mon.set_default_nickname()
+        mon.set_ot_name(ot_name)
+        mon.set_ot_id(ot_id)
+        mon.heal()
+        return mon
+
 class GSCTradingData:
     """
     Class which contains all the informations about a trader's party.
@@ -804,6 +887,20 @@ class GSCTradingData:
     
     def __init__(self, data_pokemon, data_mail=None, do_full=True):
         self.utils_class = self.get_utils_class()
+
+        # For debugging purposes
+        if data_pokemon is None:
+            self.trader = self.get_text_class().create_from_string("Server", length=self.trading_name_length)
+            self.party_info = self.party_generator(None, 0)
+            self.trader_info = 1
+            self.pokemon = []
+            if do_full:
+                for i in range(self.get_party_size()):
+                    self.pokemon += [self.mon_generator_class().create_from_scratch()]
+                    self.party_info.set_id(i, self.pokemon[i].get_species())
+            return
+
+        # Regular code
         self.trader = self.text_generator(data_pokemon, self.trader_name_pos, length=self.trading_name_length)
         self.party_info = self.party_generator(data_pokemon, self.trading_party_info_pos)
         self.trader_info = self.trainer_info_generator(data_pokemon, self.trader_info_pos)
@@ -834,6 +931,9 @@ class GSCTradingData:
     
     def get_utils_class(self):
         return GSCUtils
+    
+    def get_text_class(self):
+        return GSCTradingText
 
     def check_pos_validity(func):
         def wrapper(*args, **kwargs):
@@ -932,7 +1032,17 @@ class GSCTradingData:
         Returns False if not.
         """
         return self.pokemon[pos].get_species() in special_mons_set
-    
+
+    def heal_party(self):
+        """
+        Fully heals the entire party.
+        """
+        len_party = self.get_party_size()
+        if len(self.pokemon) < len_party:
+            len_party = len(self.pokemon)
+        for i in range(len_party):
+            self.pokemon[i].full_heal()
+
     def get_traded_mons(self, other):
         """
         Gets which pokémon were traded.
@@ -1240,7 +1350,7 @@ class GSCChecks:
     
     @clean_check_sanity_checks
     def load_stat_exp(self, val):
-        calc_val = val << (8 * self.curr_stat_exp_pos)
+        calc_val = val << (8 * (1 - (self.curr_stat_exp_pos & 1)))
         if self.curr_stat_exp_pos == 0:
             self.stat_exp[self.curr_exp_id] = calc_val
             self.curr_stat_exp_pos += 1

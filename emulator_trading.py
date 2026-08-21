@@ -2,48 +2,55 @@
 import signal
 import os
 from utilities.bgb_link_cable_server import BGBLinkCableServer
-from utilities.websocket_client import PoolTradeRunner, ProxyConnectionRunner
 from time import sleep
-from utilities.gsc_trading import GSCTrading
-from utilities.gsc_trading_jp import GSCTradingJP
-from utilities.rby_trading import RBYTrading
-from utilities.rse_sp_trading import RSESPTrading
-from utilities.rby_trading_jp import RBYTradingJP
 from utilities.gsc_trading_menu import GSCTradingMenu
+from utilities.main_shared_logic import get_connection, get_data_trader_class, start_logic
 from utilities.gsc_trading_strings import GSCTradingStrings
+import datetime
 
 class PokeTrader:
-    SLEEP_TIMER = 0.001
+    SLEEP_TIMER = 0.01
+    TIMEOUT_TIMER = 1
 
     def __init__(self, menu):
         self.curr_recv = None
         self._server = BGBLinkCableServer(self.update_data, menu, kill_function)
-        if menu.trade_type == GSCTradingStrings.two_player_trade_str:
-            self.connection = ProxyConnectionRunner(menu, kill_function)
-        elif menu.trade_type == GSCTradingStrings.pool_trade_str:
-            self.connection = PoolTradeRunner(menu, kill_function)
+        self.connection = get_connection(menu, kill_function)
 
     def run(self):
         self._server.start()
         self.connection.start()
         
     def update_data(self, data):
+        start_time = datetime.datetime.now()
+        while self.curr_recv is not None:
+            sleep(self.SLEEP_TIMER)
+            if (datetime.datetime.now() - start_time).total_seconds() >= self.TIMEOUT_TIMER:
+                break
         self.curr_recv = data
 
     # Code dependant on this connection method
-    def sendByte(self, byte_to_send, num_bytes):
+    def sendByte(self, byte_to_send, num_bytes, turbo_transfer = False, **kwargs):
+        self._server.turbo_transfer = turbo_transfer
         for i in range(num_bytes):
             self._server.to_send = byte_to_send & 0xFF
+            start_time = datetime.datetime.now()
             while self._server.to_send is not None:
                 sleep(self.SLEEP_TIMER)
+                if (datetime.datetime.now() - start_time).total_seconds() >= self.TIMEOUT_TIMER:
+                    break
             byte_to_send = byte_to_send >> 8
         return
 
     def receiveByte(self, num_bytes):
         recv = 0
         for i in range(num_bytes):
+            start_time = datetime.datetime.now()
             while self.curr_recv is None:
                 sleep(self.SLEEP_TIMER)
+                if (datetime.datetime.now() - start_time).total_seconds() >= self.TIMEOUT_TIMER:
+                    self.curr_recv = 0
+                    break
             recv |= self.curr_recv << (8*i)
             self.curr_recv = None
         return recv
@@ -63,25 +70,11 @@ signal.signal(signal.SIGINT, signal_handler)
 def transfer_func(p, menu):
     if menu.verbose:
         print(GSCTradingStrings.waiting_transfer_start_str)
-    
-    if menu.gen == 2:
-        if menu.japanese:
-            trade_c = GSCTradingJP(p.sendByte, p.receiveByte, p.connection, menu, kill_function, False)
-        else:
-            trade_c = GSCTrading(p.sendByte, p.receiveByte, p.connection, menu, kill_function, False)
-    elif menu.gen == 3:
-        trade_c = RSESPTrading(p.sendByte, p.receiveByte, p.connection, menu, kill_function, False)
-    elif menu.gen == 1:
-        if menu.japanese:
-            trade_c = RBYTradingJP(p.sendByte, p.receiveByte, p.connection, menu, kill_function, False)
-        else:
-            trade_c = RBYTrading(p.sendByte, p.receiveByte, p.connection, menu, kill_function, False)
+
+    trade_c = get_data_trader_class(p.sendByte, p.receiveByte, p.connection, menu, kill_function)
     
     if menu.gen != 3:
-        if menu.trade_type == GSCTradingStrings.two_player_trade_str:
-            trade_c.player_trade(menu.buffered)
-        elif menu.trade_type == GSCTradingStrings.pool_trade_str:
-            trade_c.pool_trade()
+        start_logic(trade_c, menu)
 
 menu = GSCTradingMenu(kill_function, is_emulator=True)
 menu.handle_menu()

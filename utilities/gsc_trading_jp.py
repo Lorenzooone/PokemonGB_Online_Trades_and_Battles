@@ -135,8 +135,10 @@ class GSCTradingJP(GSCTrading):
     end_of_line = 0x50
     single_text_len = 0xB
     mail_sender_len = 0xE
-    end_of_player_name_pos = 6
-    end_of_gsc_data_pos = 0x13B
+    # Positions off by one so the last one is covered by the
+    # checks for EOL
+    end_of_player_name_pos = 5
+    end_of_gsc_data_pos = 0x13A
     player_name_len_diff = 5
     pokemon_name_len_diff = 5
     fillers = [{}, {

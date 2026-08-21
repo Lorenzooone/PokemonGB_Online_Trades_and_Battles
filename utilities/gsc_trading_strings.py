@@ -7,6 +7,9 @@ class GSCTradingStrings:
     version_str = "Version: {major}.{minor}.{build}"
     buffered_str = "Buffered"
     synchronous_str = "Synchronous"
+    kind_trade_str = "trade"
+    kind_trading_str = "trading"
+    kind_battle_str = "battle"
     send_request = "S"
     get_request = "G"
     set_japanese_str = "Set game as Japanese (Current: International)"
@@ -30,17 +33,17 @@ class GSCTradingStrings:
     io_error_str = "I/O error({0}): {1}"
     unknown_error_str = "Unexpected error:"
     unrecognized_character_str = "UNRECOGNIZED CHARACTER: {letter}"
-    error_byte_dropped_str = "\nError! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered trade instead!"
-    warning_byte_dropped_str = "\nWarning! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered trade instead!"
+    error_byte_dropped_str = "\nError! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered {kind} instead!"
+    warning_byte_dropped_str = "\nWarning! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered {kind} instead!"
     byte_transfer_str = "{send_data} - {recv}"
     crtlc_str = 'You pressed Ctrl+C!'
     waiting_transfer_start_str = "Waiting for the transfer to start..."
-    enter_trading_room_str = "\nPlease enter the trading room..."
-    entered_trading_room_str = "\nEntered the trading room..."
+    enter_trading_room_str = "\nPlease enter the {kind_ing} room..."
+    entered_trading_room_str = "\nEntered the {kind_ing} room..."
     sit_table_str = "\nYou can now either sit at the table, or quit the room..."
-    buffered_sit_table_str = "Please sit at the table to send to the other player your trading data."
-    not_received_buffered_data_str = "\nThe other player has not sent their buffered data yet.\nStarting a trade in order to get your data, so the other player can use it."
-    found_buffered_data_str = "\nFound the other player's data.\nStarting the trade and sending your data to them, if they don't have it yet."
+    buffered_sit_table_str = "Please sit at the table to send to the other player your {kind_ing} data."
+    not_received_buffered_data_str = "\nThe other player has not sent their buffered data yet.\nStarting a {kind} in order to get your data, so the other player can use it."
+    found_buffered_data_str = "\nFound the other player's data.\nStarting the {kind} and sending your data to them, if they don't have it yet."
     recycle_data_str = "\nReusing the previously received data."
     choice_send_str = "\nSending your choice."
     choice_recv_str = "\nWaiting for the other player's choice..."
@@ -48,20 +51,20 @@ class GSCTradingStrings:
     accepted_wait_str = "\nWaiting for the answer..."
     success_send_str = "\nSending trade confirmation..."
     success_wait_str = "\nWaiting for trade confirmation..."
-    close_str = "\nClosing the trade..."
+    close_str = "\nClosing the {kind}..."
     close_on_next_str = "\nOne of the players wants to close the trade.\nEnabled auto-closing on the next selection..."
     pool_fail_str = "\nThe Pool currently seems to have no free slots. Please try again later..."
-    quit_trade_str = "\nYou should now quit the current trade."
+    quit_trade_str = "\nYou should now quit the current {kind}."
     waiting_synchro_str = "\nWaiting for the other player to be synchronized..."
-    arrived_synchro_str = "\nThe other player arrived. Starting party information trading..."
+    arrived_synchro_str = "\nThe other player arrived. Starting party information exchange..."
     transfer_to_hardware_str = "\rSection {index}: {completion}"
-    restart_trade_str = "\nStarting a new trade."
+    restart_trade_str = "\nStarting a new {kind}."
     incompatible_trade_str = "\nIt looks like the requested trade is not possible.\nYou can't do a synchronous trade with the International version and the Japanese version\nif at least one Pokémon is holding mail.\nEither do a Buffered trade, or remove the mail.\nShutting down..."
     separate_section_str = "\n"
-    buffered_negotiation_str = '\nThe other player wants to do a {other_buffered} trade.\nWould you like to switch to a {other_buffered} trade?'
-    buffered_other_negotiation_str = "\nAsking the other player whether they're willing to do a {own_buffered} trade..."
-    buffered_chosen_str = "\nDecided to do a {own_buffered} trade."
-    received_buffered_data_str = "\nReceived the trade data from the other player!\nYou can now start the real trade."
+    buffered_negotiation_str = '\nThe other player wants to do a {other_buffered} {kind}.\nWould you like to switch to a {other_buffered} {kind}?'
+    buffered_other_negotiation_str = "\nAsking the other player whether they're willing to do a {own_buffered} {kind}..."
+    buffered_chosen_str = "\nDecided to do a {own_buffered} {kind}."
+    received_buffered_data_str = "\nReceived the {kind} data from the other player!\nYou can now start the real {kind}."
     no_recycle_data_str = "\nBoth players' input is required.\nRestarting the trade from scratch."
     no_move_other_data_str = "\nThe other player's input was not required.\nSkipping receiving their moves data."
     reuse_data_str = "\nReusing the other player's trade data."
@@ -73,7 +76,17 @@ class GSCTradingStrings:
     send_mail_other_data_str = "\nSending your mail data to the other player."
     pool_receive_data_str = "\nGetting the Pool's trade offer..."
     pool_recycle_data_str = "\nReusing the previous Pool's trade offer..."
+    battle_impossible_verify_opponent_moves_str = "Warning! Temporarily impossible to verify the moves used by the opponent!"
+    battle_again_ossible_verify_opponent_moves_str = "It is now possible to verify the moves used by the opponent!"
+    battle_synchronous_waiting_opponent_transfer_str = "Waiting for the other player to also start the transfer..."
+    battle_wait_press_enter_str = "Waiting {time} seconds before checking for the next user input...\nPress ENTER to skip the wait and instantly start checking for user input."
+    battle_reading_user_input_str = "Now reading user input..."
+    battle_no_data_str = "Player stopped sending data!\nClosing application!\nIf it is not expected, please report this as an issue!"
+    battle_problem_command_other_str = "Issue detected with command sent by other player!\nClosing battle!"
+    battle_problem_command_own_str = "Issue detected with command sent by player!\nClosing battle!"
+    battle_data_error_initial_str = "ERROR WITH OTHER PLAYER'S DATA!\nSOMETHING CHANGED! ABORTING BATTLE!"
     two_player_trade_str = "2P"
+    two_player_battle_str = "2B"
     pool_trade_str = "PT"
     accepted_str = "Accept"
     decline_str = "Decline"
@@ -83,6 +96,7 @@ class GSCTradingStrings:
     port_str = "Port: "
     room_str = "Room (Default = {room}): "
     max_level_str = "New Max Level (Current = {max_level}): "
+    battle_change_turn_time_str = "Gen 2 Battle turn time: "
     emulator_host_str = "Emulator's host: "
     emulator_port_str = "Emulator's port: "
     game_selector_menu_str = ("\n=============== Game Selector ===============\n"
@@ -95,6 +109,12 @@ class GSCTradingStrings:
     top_level_menu_str = ("\n=============== Top level Menu ===============\n"
                           "1) Start 2-Player trade (Default)\n"
                           "2) Start Pool trade\n"
+                          "b) Start 2-Player battle\n"
+                          "3) Options"
+                          )
+    top_level_menu_gen3_str = ("\n=============== Top level Menu ===============\n"
+                          "1) Start 2-Player trade (Default)\n"
+                          "2) Start Pool trade\n"
                           "3) Options"
                           )
     options_menu_str = ("\n=============== General Options ===============\n"
@@ -104,15 +124,17 @@ class GSCTradingStrings:
                         "3) {japanese_str}\n"
                         "4) {sanity_checks_str}\n"
                         "5) Change Verbosity (Current: {verbose})\n"
-                        "\n=============== 2-Player trade Options ===============\n"
-                        "6) Change to {other_buffered} Trading (Current: {own_buffered})\n"
+                        "\n=============== 2-Player trade/battle Options ===============\n"
+                        "6) Change to {other_buffered} Trading/Battle (Current: {own_buffered})\n"
                         "7) {kill_on_byte_drops_str}\n"
+                        "{battle_turn_time_str}"
                         "\n=============== Pools trade Options ===============\n"
                         "8) Set Max Level (Current: {max_level})"
                         "{gen_2_eggify_str}"
                         "{emulator_str}"
                         )
     gen_2_eggify_str = ("\n9) {egg_str}")
+    battle_turn_time_option_str = ("btt) Time between turns: {battle_turn_time}\n")
     emulator_options_str = ("\n\n=============== Emulator Options ===============\n"
                             "10) Host for emulator connection: {emulator_host}\n"
                             "11) Port for emulator connection: {emulator_port}"
@@ -139,26 +161,39 @@ class GSCTradingStrings:
         if buffered:
             return GSCTradingStrings.buffered_str
         return GSCTradingStrings.synchronous_str
+
+    def get_kind_str(is_battle):
+        if is_battle:
+            return GSCTradingStrings.kind_battle_str
+        return GSCTradingStrings.kind_trade_str
+
+    def get_kind_ing_str(is_battle):
+        if is_battle:
+            return GSCTradingStrings.kind_battle_str
+        return GSCTradingStrings.kind_trade_str
     
-    def buffered_negotiation_print(buffered):
-        print(GSCTradingStrings.buffered_negotiation_str.format(other_buffered=GSCTradingStrings.get_buffered_str(not buffered)))
+    def buffered_negotiation_print(buffered, is_battle):
+        print(GSCTradingStrings.buffered_negotiation_str.format(other_buffered=GSCTradingStrings.get_buffered_str(not buffered), kind=GSCTradingStrings.get_kind_str(is_battle)))
         print(GSCTradingStrings.yes_no_str, end = '')
     
     def version_print(major, minor, build):
         print(GSCTradingStrings.version_str.format(major=major, minor=minor, build=build))
     
-    def buffered_other_negotiation_print(buffered):
-        print(GSCTradingStrings.buffered_other_negotiation_str.format(own_buffered = GSCTradingStrings.get_buffered_str(buffered)))
+    def buffered_other_negotiation_print(buffered, is_battle):
+        print(GSCTradingStrings.buffered_other_negotiation_str.format(own_buffered = GSCTradingStrings.get_buffered_str(buffered), kind=GSCTradingStrings.get_kind_str(is_battle)))
     
-    def chosen_buffered_print(buffered):
-        print(GSCTradingStrings.buffered_chosen_str.format(own_buffered = GSCTradingStrings.get_buffered_str(buffered)))
+    def chosen_buffered_print(buffered, is_battle):
+        print(GSCTradingStrings.buffered_chosen_str.format(own_buffered = GSCTradingStrings.get_buffered_str(buffered), kind=GSCTradingStrings.get_kind_str(is_battle)))
         if buffered:
-            print(GSCTradingStrings.buffered_sit_table_str)
+            print(GSCTradingStrings.buffered_sit_table_str.format(kind_ing=GSCTradingStrings.get_kind_ing_str(is_battle)))
             
     def game_selector_menu_print():
         print(GSCTradingStrings.game_selector_menu_str)
             
-    def top_menu_print():
+    def top_menu_print(gen, is_timecapsule):
+        if (gen == 3) or is_timecapsule:
+            print(GSCTradingStrings.top_level_menu_gen3_str)
+            return
         print(GSCTradingStrings.top_level_menu_str)
     
     def get_japanese_str(japanese):
@@ -183,6 +218,11 @@ class GSCTradingStrings:
         if options.egg:
             egg_str = GSCTradingStrings.unset_egg_str
         return GSCTradingStrings.gen_2_eggify_str.format(egg_str=egg_str)
+
+    def get_battle_turn_time_option_str(options):
+        if not options.gen == 2:
+            return ""
+        return GSCTradingStrings.battle_turn_time_option_str.format(battle_turn_time=options.time_between_battle_turns)
     
     def get_emulator_str(options):
         if not options.is_emulator:
@@ -199,7 +239,8 @@ class GSCTradingStrings:
                                                      kill_on_byte_drops_str=GSCTradingStrings.get_kill_on_byte_drops_str(options.kill_on_byte_drops),
                                                      emulator_str = GSCTradingStrings.get_emulator_str(options),
                                                      max_level = options.max_level,
-                                                     gen_2_eggify_str = GSCTradingStrings.get_eggify_str(options)
+                                                     gen_2_eggify_str = GSCTradingStrings.get_eggify_str(options),
+                                                     battle_turn_time_str = GSCTradingStrings.get_battle_turn_time_option_str(options)
                                                      )
              )
 
@@ -217,6 +258,9 @@ class GSCTradingStrings:
     
     def change_room_print(room):
         print(GSCTradingStrings.room_str.format(room=room), end='')
+    
+    def change_battle_turn_time_print():
+        print(GSCTradingStrings.battle_change_turn_time_str, end='')
     
     def change_emu_server_print():
         print(GSCTradingStrings.emulator_host_str, end='')

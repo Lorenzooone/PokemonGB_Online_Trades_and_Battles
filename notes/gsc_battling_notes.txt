@@ -1,0 +1,11 @@
+GSC:
+0x80 - Move 1
+0x84 - Pokémon 1
+0x8b - Bugged Pokémon
+0x8c - Bugged Pokémon
+0x8d - In theory nothing (from Gen 1, where it is used for Wrap), can crash game
+0x8e - Struggle
+0x8f - Flee
+
+RBY:
+Like GSC in range 0x60 - 0x70

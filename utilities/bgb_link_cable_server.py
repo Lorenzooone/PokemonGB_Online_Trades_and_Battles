@@ -12,7 +12,8 @@ from .gsc_trading_data_utils import GSCUtilsMisc
 # Base from: https://github.com/mwpenny/gbplay
 
 class BGBLinkCableSender(threading.Thread):
-    SLEEP_TIMER = 0.01
+    SLEEP_TIMER = 0.1
+    SLEEP_TIMER_TURBO = 0.01
     def __init__(self, server, connection):
         threading.Thread.__init__(self)
         self.daemon=True
@@ -25,8 +26,11 @@ class BGBLinkCableSender(threading.Thread):
                 send_data = self._server.send_as_master()
                 if send_data:
                     self._connection.send(send_data)
-                    self._server.to_send = None
-                sleep(BGBLinkCableSender.SLEEP_TIMER)
+                if self._server.turbo_transfer:
+                    sleep_timer = BGBLinkCableSender.SLEEP_TIMER_TURBO
+                else:
+                    sleep_timer = BGBLinkCableSender.SLEEP_TIMER
+                sleep(sleep_timer)
                         
             except Exception as e:
                 print(GSCTradingStrings.socket_error_str, str(e))
@@ -59,6 +63,10 @@ class BGBLinkCableServer(threading.Thread):
         self.port = menu.emulator[1]
         self.kill_function = kill_function
         self.to_send = None
+        self.last_offset = 0
+        self.mask = 0x7FFFFFFF
+        self.mask_add_for_sub = self.mask + 1
+        self.turbo_transfer = False
     
     def verbose_print(self, to_print, end='\n'):
         """
@@ -67,10 +75,13 @@ class BGBLinkCableServer(threading.Thread):
         GSCUtilsMisc.verbose_print(to_print, self.verbose, end=end)
 
     def get_curr_timestamp(self):
-        return int(timeit.default_timer()*(2**21)) & 0x7FFFFFFF
+        return (int(timeit.default_timer()*(2**21)) + self.mask_add_for_sub) & self.mask
         
     def get_offset(self):
-        return int((self.get_curr_timestamp() - self._last_base_timestamp))
+        return int(((self.get_curr_timestamp() + self.mask_add_for_sub) - self._last_base_timestamp) & self.mask)
+
+    def get_timestamp_to_send(self):
+        return (self._last_received_timestamp + self.get_offset()) & self.mask
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -115,6 +126,7 @@ class BGBLinkCableServer(threading.Thread):
 
                         b1, b2, b3, b4, timestamp = struct.unpack(self.PACKET_FORMAT, data)
                         if timestamp != 0:
+                            self.last_offset = ((timestamp + self.mask_add_for_sub) - self._last_received_timestamp) & self.mask
                             self._last_received_timestamp = timestamp
                             self._last_base_timestamp = self.get_curr_timestamp()
 
@@ -146,7 +158,7 @@ class BGBLinkCableServer(threading.Thread):
     def _handle_sync1(self, data, control, _b4):
         return struct.pack(
             self.PACKET_FORMAT,
-            105,        # Sync3 packet
+            105,        # Sync2 packet
             0,          # Not doing a passive transfer
             0x80,       # Deprecated
             0,          # Deprecated
@@ -157,25 +169,26 @@ class BGBLinkCableServer(threading.Thread):
         if self._last_received_timestamp != 0:
             response = self.to_send
             if response is not None:
+                self.to_send = None
                 return struct.pack(
                     self.PACKET_FORMAT,
                     104,        # Master data packet
                     response,   # Data value
-                    0x80,       # Control value
+                    0x81,       # Control value
                     0,          # Unused
-                    self._last_received_timestamp + self.get_offset()
+                    self.get_timestamp_to_send()
                 )
             elif not self.can_go:
                 return struct.pack(
                     self.PACKET_FORMAT,
                     104,        # Master data packet
                     0,          # Data value
-                    0x80,       # Control value
+                    0x81,       # Control value
                     0,          # Unused
-                    self._last_received_timestamp + self.get_offset()
+                    self.get_timestamp_to_send()
                 )
-        else:
-            return self._send_sync()
+        # Always send something, getting desynced is a real issue!
+        return self._send_sync()
 
     def _send_sync(self):
         if self.very_verbose:
@@ -188,7 +201,7 @@ class BGBLinkCableServer(threading.Thread):
             0,
             0,
             0,
-            self._last_received_timestamp + self.get_offset()
+            self.get_timestamp_to_send()
         )
 
     def _handle_sync2(self, data, control, _b4):
@@ -212,7 +225,7 @@ class BGBLinkCableServer(threading.Thread):
                 b2,
                 b3,
                 b4,
-                self._last_received_timestamp + self.get_offset()
+                self.get_timestamp_to_send()
             )
 
     def _handle_status(self, b2, _b3, _b4):

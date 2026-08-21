@@ -136,6 +136,8 @@ pool_mons3.bin
 !pool_default_data/pool_mons1.bin
 !pool_default_data/pool_mons2.bin
 !pool_default_data/pool_mons3.bin
+dumping.py
+*.zip
 
 #HxD backup files
 *.bak

@@ -1,14 +1,10 @@
-from .gsc_trading import GSCTradingClient, GSCTrading
+from .gsc_trading import GSCTradingClient, GSCTrading, GSCTradingClientTransfers
 from .gsc_trading_strings import GSCTradingStrings
 from .rby_trading_data_utils import RBYUtils, RBYTradingData, RBYChecks
 
-class RBYTradingClient(GSCTradingClient):
-    """
-    Class which handles sending/receiving trading data
-    to/from the other recepient.
-    It uses a system of TAGs and IDs.
-    """
-    base_folder = "useful_data/rby/"
+class RBYTradingClientTransfers:
+    # Explicitly do NOT inherit from GSCTradingClientTransfers to avoid
+    # bad debugging
     full_transfer = "FLL1"
     single_transfer = "SNG1"
     pool_transfer = "POL1"
@@ -37,6 +33,15 @@ class RBYTradingClient(GSCTradingClient):
         random_data_transfer : {10}, # Random values from server
         need_data_transfer : {1 + 1} # Counter + Whether it needs the other player's data
     }
+
+class RBYTradingClient(GSCTradingClient):
+    """
+    Class which handles sending/receiving trading data
+    to/from the other recepient.
+    It uses a system of TAGs and IDs.
+    """
+    base_folder = "useful_data/rby/"
+    transfers_class = RBYTradingClientTransfers
     
     def __init__(self, trader, connection, verbose, stop_trade, party_reader, base_no_trade = base_folder + "base.bin", base_pool = base_folder + "base_pool.bin"):
         super(RBYTradingClient, self).__init__(trader, connection, verbose, stop_trade, party_reader, base_no_trade=base_no_trade, base_pool=base_pool)
@@ -50,7 +55,7 @@ class RBYTradingClient(GSCTradingClient):
         has user input and the species of the pokémon.
         It also loads it into the correct pokémon and evolves it if necessary.
         """
-        val = self.get_with_counter(self.moves_transfer)
+        val = self.get_with_counter(self.transfers_class.moves_transfer)
         if val is not None:
             updating_mon = self.trader.other_pokemon.pokemon[self.trader.other_pokemon.get_last_mon_index()]
             self.trader.checks.prepare_species_buffer()
@@ -74,7 +79,7 @@ class RBYTradingClient(GSCTradingClient):
         for i in range(4):
             val[i+1] = updated_mon.get_move(i)
             val[i+5] = updated_mon.get_pp(i)
-        self.send_with_counter(self.moves_transfer, val)
+        self.send_with_counter(self.transfers_class.moves_transfer, val)
 
 class RBYTrading(GSCTrading):
     """
@@ -136,14 +141,12 @@ class RBYTrading(GSCTrading):
         # Send and get the sections
         send_data[0] = self.utils_class.base_random_section
         just_sent = None
-        self.is_running_compat_3_mode = True
-        self.comms.send_client_version()
-        server_version = self.attempt_receive(self.comms.get_server_version, 5)
-        if server_version is not None:
+
+        while not self.is_version_check_done:
+            self.sleep_func()
+        if self.server_version is not None:
             send_data[0] = self.force_receive(self.comms.get_random)
-            other_client_version = self.attempt_receive(self.comms.get_client_version, 5)
-            if other_client_version is not None:
-                self.is_running_compat_3_mode = False
+
         if self.is_running_compat_3_mode:
             random_data, random_data_other, just_sent = self.read_section(0, send_data[0], buffered, just_sent, 0)
         else:

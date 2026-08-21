@@ -1,8 +1,8 @@
-from .rby_trading import RBYTrading
+from .rby_battling import RBYBattling
 
-class RBYTradingJP(RBYTrading):
+class RBYBattlingJP(RBYBattling):
     """
-    Class which handles the trading process for the player.
+    Class which handles the battling process for the player.
     """
     end_of_line = 0x50
     single_text_len = 0xB
@@ -29,5 +29,4 @@ class RBYTradingJP(RBYTrading):
     }, {}]
     
     def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(RBYTradingJP, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
-            
+        super(RBYBattlingJP, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)

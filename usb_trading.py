@@ -6,13 +6,8 @@ import traceback
 import time
 import os
 import multiboot
-from utilities.gsc_trading import GSCTrading
-from utilities.gsc_trading_jp import GSCTradingJP
-from utilities.rby_trading import RBYTrading
-from utilities.rby_trading_jp import RBYTradingJP
-from utilities.rse_sp_trading import RSESPTrading
-from utilities.websocket_client import PoolTradeRunner, ProxyConnectionRunner
 from utilities.gsc_trading_menu import GSCTradingMenu
+from utilities.main_shared_logic import get_connection, get_data_trader_class, start_logic
 from utilities.gsc_trading_strings import GSCTradingStrings
 
 dev = None
@@ -39,11 +34,11 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     
     if menu.verbose:
         print(GSCTradingStrings.waiting_transfer_start_str)
-        
-    if menu.trade_type == GSCTradingStrings.two_player_trade_str:
-        connection = ProxyConnectionRunner(menu, kill_function)
-    elif menu.trade_type == GSCTradingStrings.pool_trade_str:
-        connection = PoolTradeRunner(menu, kill_function)
+
+    if menu.is_battle is None:
+        menu.is_battle = False
+
+    connection = get_connection(menu, kill_function)
     
     if menu.multiboot:
         menu.gen = 3
@@ -72,27 +67,14 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     if menu.multiboot:
         multiboot.multiboot(raw_receiver, sender, list_sender, path)
         return
-    if menu.gen == 2:
-        if menu.japanese:
-            trade_c = GSCTradingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
-        else:
-            trade_c = GSCTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
-    elif menu.gen == 3:
-        trade_c = RSESPTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
-    elif menu.gen == 1:
-        if menu.japanese:
-            trade_c = RBYTradingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
-        else:
-            trade_c = RBYTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
+
+    trade_c = get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = pre_sleep)
     connection.start()
-    
-    if menu.trade_type == GSCTradingStrings.two_player_trade_str:
-        trade_c.player_trade(menu.buffered)
-    elif menu.trade_type == GSCTradingStrings.pool_trade_str:
-        trade_c.pool_trade()
+
+    start_logic(trade_c, menu)
 
 # Code dependant on this connection method
-def sendByte(byte_to_send, num_bytes):
+def sendByte(byte_to_send, num_bytes, **kwargs):
     epOut.write(byte_to_send.to_bytes(num_bytes, byteorder='big'), timeout=int(max_usb_timeout_w * 1000))
     return
 
@@ -118,7 +100,7 @@ def receiveByte_raw(num_bytes=None):
     return epIn.read(num_bytes, timeout=int(max_usb_timeout_r * 1000))
 
 # Code dependant on this connection method
-def sendByte_serial(byte_to_send, num_bytes):
+def sendByte_serial(byte_to_send, num_bytes, **kwargs):
     serial_port.write(byte_to_send.to_bytes(num_bytes, byteorder='big'))
     return
 
@@ -144,7 +126,7 @@ def receiveByte_raw_serial(num_bytes=None):
     return serial_port.read(num_bytes)
 
 # Code dependant on this connection method
-def sendByte_win(byte_to_send, num_bytes):
+def sendByte_win(byte_to_send, num_bytes, **kwargs):
     p.write(byte_to_send.to_bytes(num_bytes, byteorder='big'))
 
 # Code dependant on this connection method

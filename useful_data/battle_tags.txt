@@ -1,0 +1,56 @@
+# Formats
+AG
+Ubers
+OU
+UU
+NU
+RU
+PU
+ZU
+NFE
+LC
+# Extra format specifiers
+Hackmons
+Tradebacks
+Monotype
+# Levels
+Lvl. 255
+Lvl. 100
+Lvl. 50
+Lvl. 5
+# Language
+INT
+JPN
+INT <-> JPN
+# Extras
+Story Team
+Fully trained
+Competitive
+Casual
+No checks
+No items
+Open Team Sheet
+Closed Team Sheet
+# Current Location for story teams
+Pewter City
+Cerulean City
+Vermilion City
+Lavender Town
+Celadon City
+Fuchsia City
+Saffron City
+Cinnabar Island
+Viridian City (2nd visit)
+Indigo Plateau
+Post-game
+Violet City
+Azalea Town
+Goldenrod City
+Ecruteak City
+Cianwood City
+Olivine City
+Mahogany Town
+Blackthorn City
+Gen 2 Kanto
+Mt. Silver
+Post-post-game

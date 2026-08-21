@@ -1,16 +1,12 @@
 import time
-from .gsc_trading import GSCTradingClient, GSCTrading
+from .gsc_trading import GSCTradingClient, GSCTrading, GSCTradingClientTransfers
 from .gsc_trading_strings import GSCTradingStrings
 from .rse_sp_trading_data_utils import RSESPUtils, RSESPTradingData, RSESPChecks
 from .gsc_trading_data_utils import GSCUtilsMisc
 
-class RSESPTradingClient(GSCTradingClient):
-    """
-    Class which handles sending/receiving trading data
-    to/from the other recepient.
-    It uses a system of TAGs and IDs.
-    """
-    base_folder = "useful_data/rse/"
+class RSESPTradingClientTransfers:
+    # Explicitly do NOT inherit from GSCTradingClientTransfers to avoid
+    # bad debugging
     full_transfer = "FL3S"
     pool_transfer = "P3SI"
     pool_transfer_out = "P3SO"
@@ -19,6 +15,7 @@ class RSESPTradingClient(GSCTradingClient):
     version_server_transfer = "VES3"
     accept_transfer = ["A3S1", "A3S2"]
     success_transfer = ["S3S1", "S3S2", "S3S3", "S3S4", "S3S5", "S3S6", "S3S7"]
+    random_data_transfer = "RAN3" # Needed by server, unused...
     possible_transfers = {
         full_transfer: {0x380}, # Total transfer's length - v1.0.0 
         pool_transfer: {1 + 0x95, 1 + 1}, # Counter + Single Pokémon (and mail + version + special ribbons) OR Counter + Fail
@@ -36,6 +33,15 @@ class RSESPTradingClient(GSCTradingClient):
         version_client_transfer : {6}, # Client's version value
         version_server_transfer : {6}, # Server's version value
     }
+
+class RSESPTradingClient(GSCTradingClient):
+    """
+    Class which handles sending/receiving trading data
+    to/from the other recepient.
+    It uses a system of TAGs and IDs.
+    """
+    base_folder = "useful_data/rse/"
+    transfers_class = RSESPTradingClientTransfers
     
     def __init__(self, trader, connection, verbose, stop_trade, party_reader, base_no_trade = base_folder + "base.bin", base_pool = base_folder + "base_pool.bin"):
         super(RSESPTradingClient, self).__init__(trader, connection, verbose, stop_trade, party_reader, base_no_trade=base_no_trade, base_pool=base_pool)
@@ -47,7 +53,7 @@ class RSESPTradingClient(GSCTradingClient):
         """
         Handles getting the trading data for the mon offered by the server.
         """
-        mon = self.get_with_counter(self.pool_transfer)
+        mon = self.get_with_counter(self.transfers_class.pool_transfer)
         if mon is not None:
             if len(mon) == 1:
                 print(GSCTradingStrings.pool_fail_str)
@@ -87,7 +93,7 @@ class RSESPTradingClient(GSCTradingClient):
             if index < self.trader.own_pokemon.get_party_size():
                 if (choice & 0xFFFF) == self.trader.own_pokemon.pokemon[index].get_species():
                     own_mon = self.utils_class.single_mon_to_data(self.trader.own_pokemon.pokemon[index], None)
-        self.send_with_counter(self.pool_transfer_out, own_mon)
+        self.send_with_counter(self.transfers_class.pool_transfer_out, own_mon)
     
     def get_three_bytes_of_data(self, ret):
         if ret is not None:
@@ -101,44 +107,44 @@ class RSESPTradingClient(GSCTradingClient):
         the player's entire trading data and prepares the data for 
         closing that trade.
         """
-        return self.connection.recv_data(self.full_transfer)
+        return self.connection.recv_data(self.transfers_class.full_transfer)
 
     def get_accepted(self, num_accept):
         """
         Handles getting whether the other player wants to do the trade
         or not.
         """
-        return self.get_three_bytes_of_data(self.get_with_counter(self.accept_transfer[num_accept]))
+        return self.get_three_bytes_of_data(self.get_with_counter(self.transfers_class.accept_transfer[num_accept]))
                 
     def send_accepted(self, choice, num_accept):
         """
         Handles sending whether the player wants to do the trade or not.
         """
-        self.send_with_counter(self.accept_transfer[num_accept], GSCUtilsMisc.to_n_bytes_le(choice, 3))
+        self.send_with_counter(self.transfers_class.accept_transfer[num_accept], GSCUtilsMisc.to_n_bytes_le(choice, 3))
 
     def get_success(self, num_success):
         """
         Handles getting the success trade confirmation value.
         """
-        return self.get_three_bytes_of_data(self.get_with_counter(self.success_transfer[num_success]))
+        return self.get_three_bytes_of_data(self.get_with_counter(self.transfers_class.success_transfer[num_success]))
                 
     def send_success(self, choice, num_success):
         """
         Handles sending the success trade confirmation value.
         """
-        self.send_with_counter(self.success_transfer[num_success], GSCUtilsMisc.to_n_bytes_le(choice, 3))
+        self.send_with_counter(self.transfers_class.success_transfer[num_success], GSCUtilsMisc.to_n_bytes_le(choice, 3))
                 
     def get_chosen_mon(self):
         """
         Handles getting which pokémon the other player wants to trade.
         """
-        return self.get_three_bytes_of_data(self.get_with_counter(self.choice_transfer))
+        return self.get_three_bytes_of_data(self.get_with_counter(self.transfers_class.choice_transfer))
         
     def send_chosen_mon(self, choice):
         """
         Handles sending which pokémon the player wants to trade.
         """
-        self.send_with_counter(self.choice_transfer, GSCUtilsMisc.to_n_bytes_le(choice, 3))
+        self.send_with_counter(self.transfers_class.choice_transfer, GSCUtilsMisc.to_n_bytes_le(choice, 3))
 
 class RSESPTrading(GSCTrading):
     """
@@ -378,7 +384,7 @@ class RSESPTrading(GSCTrading):
         self.verbose_print(GSCTradingStrings.separate_section_str, end='')
         return buf, other_buf
                 
-    def wait_for_set_of_values(self, next, values):
+    def wait_for_set_of_values(self, next, values, break_on_no_data=False):
         """
         Waits for the user choosing an option and confirms it's not some
         garbage being sent.
@@ -470,7 +476,7 @@ class RSESPTrading(GSCTrading):
         autoclose_on_stop = base_autoclose
         
         if close:
-            self.verbose_print(GSCTradingStrings.quit_trade_str)
+            self.verbose_print(GSCTradingStrings.quit_trade_str.format(kind=self.kind_str))
 
         while not trade_completed:
             # Get the choice
@@ -534,7 +540,7 @@ class RSESPTrading(GSCTrading):
                         self.send_data_multiple_times(self.swap_trade_raw_data_pure, received_success)
 
                     trade_completed = True
-                    self.verbose_print(GSCTradingStrings.restart_trade_str)
+                    self.verbose_print(GSCTradingStrings.restart_trade_str.format(kind=self.kind_str))
                     self.exit_or_new = True
                     self.comms.reset_big_trading_data()
                     self.reset_trade()
@@ -545,7 +551,7 @@ class RSESPTrading(GSCTrading):
                     # If both players want to end the trade, do it
                     trade_completed = True
                     self.exit_or_new = True
-                    self.verbose_print(GSCTradingStrings.close_str)
+                    self.verbose_print(GSCTradingStrings.close_str.format(kind=self.kind_str))
                     self.end_trade()
                     return True
                 else:
@@ -616,6 +622,7 @@ class RSESPTrading(GSCTrading):
         """
         self.trade_type = GSCTradingStrings.two_player_trade_str
         self.reset_trade()
+        self.comms.send_client_version()
         self.exit_or_new = True
         valid = True
         while True:
@@ -632,6 +639,7 @@ class RSESPTrading(GSCTrading):
         """
         self.trade_type = GSCTradingStrings.pool_trade_str
         self.reset_trade()
+        self.comms.send_client_version()
         self.max_level = self.menu.max_level
         while True:
             # Get data from the server and then use it to start the trade

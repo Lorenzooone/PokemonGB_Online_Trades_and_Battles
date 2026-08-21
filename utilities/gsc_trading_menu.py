@@ -31,13 +31,16 @@ class GSCTradingMenu:
         self.do_sanity_checks = args.do_sanity_checks
         self.kill_on_byte_drops = args.kill_on_byte_drops
         self.verbose = args.verbose
+        self.time_between_battle_turns = args.time_between_battle_turns
+        self.is_battle = args.is_battle
         self.gen = args.gen_number
         self.trade_type = args.trade_type
         self.room = args.room
+        self.timecapsule = False
         self.toppest_menu_handlers = {
             "1": self.start_gen1_trading,
             "2": self.start_gen2_trading,
-            "3": self.start_gen1_trading,
+            "3": self.start_gen1_trading_tc,
             "4": self.start_gen3_trading,
             "m": self.start_multiboot_gen3
             }
@@ -45,7 +48,8 @@ class GSCTradingMenu:
             "0": self.start_2p_trading,
             "1": self.start_2p_trading,
             "2": self.start_pool_trading,
-            "3": self.handle_options
+            "3": self.handle_options,
+            "b": self.start_2p_battling
             }
         self.options_menu_handlers = {
             "0": self.handle_exit_option,
@@ -57,7 +61,8 @@ class GSCTradingMenu:
             "6": self.handle_buffered_option,
             "7": self.handle_kill_on_byte_drop_option,
             "8": self.handle_max_level_option,
-            "9": self.handle_eggs_option
+            "9": self.handle_eggs_option,
+            "btt": self.handle_battle_turn_time_option
             }
         if is_emulator:
             self.options_menu_handlers["10"] = self.handle_emulator_host_option
@@ -70,11 +75,19 @@ class GSCTradingMenu:
         except ValueError:
             ret_val = default_value
         return ret_val
+
+    def get_float(self, default_value):
+        x = input()
+        try:
+            ret_val = float(x)
+        except ValueError:
+            ret_val = default_value
+        return ret_val
     
-    def handle_buffered_change_offer(self, buffered):
+    def handle_buffered_change_offer(self, buffered, is_battle):
         decided = False
         while not decided:
-            GSCTradingStrings.buffered_negotiation_print(buffered)
+            GSCTradingStrings.buffered_negotiation_print(buffered, is_battle)
             x = input().lower()
             if x == "y" or x == "yes":
                 buffered = not buffered
@@ -97,16 +110,20 @@ class GSCTradingMenu:
         GSCTradingStrings.version_print(TradingVersion.version_major, TradingVersion.version_minor, TradingVersion.version_build)
         if self.multiboot:
             self.start_pool_trading()
-        elif self.trade_type is None or ((self.trade_type != GSCTradingStrings.two_player_trade_str) and (self.trade_type != GSCTradingStrings.pool_trade_str)):
+        if (self.gen == 3) or (self.timecapsule):
+            self.is_battle = None
+        if (self.gen is None) or ((self.is_battle is None) and ((self.trade_type is None) or ((self.trade_type != GSCTradingStrings.two_player_trade_str) and (self.trade_type != GSCTradingStrings.pool_trade_str)))):
             self.handle_game_selector()
             if not self.multiboot:
                 ret_val = False
                 while not ret_val:
-                    GSCTradingStrings.top_menu_print()
+                    GSCTradingStrings.top_menu_print(self.gen, self.timecapsule)
                     GSCTradingStrings.choice_print()
                     ret_val = self.top_menu_handlers.get(input(), self.top_menu_handlers["0"])()
         else:
-            if self.trade_type == GSCTradingStrings.two_player_trade_str:
+            if self.is_battle is not None:
+                self.start_2p_battling()
+            elif self.trade_type == GSCTradingStrings.two_player_trade_str:
                 self.start_2p_trading()
             elif self.trade_type == GSCTradingStrings.pool_trade_str:
                 self.start_pool_trading()
@@ -114,6 +131,17 @@ class GSCTradingMenu:
     def get_default_room(self):
         r = Random()
         return r.randint(0,99999)
+    
+    def start_2p_battling(self):
+        if (self.gen == 3) or self.timecapsule:
+            self.is_battle = None
+            return False
+        self.is_battle = True
+        if self.room is None:
+            self.room = self.get_default_room()
+            GSCTradingStrings.change_room_print(self.room)
+            self.room = self.get_int(self.room)
+        return True
     
     def start_2p_trading(self):
         self.trade_type = GSCTradingStrings.two_player_trade_str
@@ -129,6 +157,11 @@ class GSCTradingMenu:
     
     def start_gen1_trading(self):
         self.gen = 1
+        return True
+    
+    def start_gen1_trading_tc(self):
+        self.gen = 1
+        self.timecapsule = True
         return True
     
     def start_gen2_trading(self):
@@ -165,14 +198,21 @@ class GSCTradingMenu:
         self.server[1] = self.get_int(self.server[1])
         return False
     
-    def handle_emulator_host_option(self):
-        GSCTradingStrings.change_emu_server_print()
-        self.emulator[0] = input()
+    def handle_battle_turn_time_option(self):
+        if self.gen != 2:
+            return True
+        GSCTradingStrings.change_battle_turn_time_print()
+        self.time_between_battle_turns = self.get_float(self.time_between_battle_turns)
         return False
     
     def handle_emulator_port_option(self):
         GSCTradingStrings.change_emu_port_print()
         self.emulator[1] = self.get_int(self.emulator[1])
+        return False
+
+    def handle_emulator_host_option(self):
+        GSCTradingStrings.change_emu_server_print()
+        self.emulator[0] = input()
         return False
     
     def handle_buffered_option(self):
@@ -211,6 +251,9 @@ class GSCTradingMenu:
     def handle_args(self, is_emulator):
         # Parse program's arguments
         parser = ArgumentParser()
+        parser.add_argument("-btl", "--battle",
+                            action="store_true", dest="is_battle", default=None,
+                            help="Do a battle")
         parser.add_argument("-g", "--generation", dest="gen_number", default = None,
                             help="generation (1 = RBY/Timecapsule, 2 = GSC, 3 = RSE Special)", type=int)
         parser.add_argument("-t", "--trade_type", dest="trade_type", default = None,
@@ -226,6 +269,9 @@ class GSCTradingMenu:
         parser.add_argument("-dsc", "--disable_sanity_checks",
                             action="store_false", dest="do_sanity_checks", default=True,
                             help="don't perform sanity checks for data sent to the device")
+        parser.add_argument("-btt", "--battle_turn_time",
+                            dest="time_between_battle_turns", default=30.0,
+                            help="Time between battle turns for generation 2", type=float)
         parser.add_argument("-dkb", "--disable_kill_drops",
                             action="store_false", dest="kill_on_byte_drops", default=True,
                             help="don't kill the process for dropped bytes")
@@ -254,7 +300,7 @@ class GSCBufferedNegotiator(threading.Thread):
     buffered variable doesn't match up
     """
 
-    def __init__(self, menu, comms, buffered, sleep_func):
+    def __init__(self, menu, comms, buffered, sleep_func, post_func, is_battle=False):
         threading.Thread.__init__(self)
         self.daemon=True
         self.comms = comms
@@ -262,6 +308,8 @@ class GSCBufferedNegotiator(threading.Thread):
         self.final_buffered = None
         self.buffered = buffered
         self.sleep_func = sleep_func
+        self.post_func = post_func
+        self.is_battle = is_battle
     
     def force_receive(self, fun):
         received = None
@@ -286,10 +334,10 @@ class GSCBufferedNegotiator(threading.Thread):
                 change_buffered = False
         while buffered != other_buffered:
             if not change_buffered:
-                GSCTradingStrings.buffered_other_negotiation_print(buffered)
+                GSCTradingStrings.buffered_other_negotiation_print(buffered, self.is_battle)
                 other_buffered = self.force_receive(self.comms.get_buffered_data)
             else:
-                buffered = self.menu.handle_buffered_change_offer(buffered)
+                buffered = self.menu.handle_buffered_change_offer(buffered, self.is_battle)
                 self.comms.send_buffered_data(buffered)
             change_buffered = not change_buffered
         return buffered
@@ -300,4 +348,5 @@ class GSCBufferedNegotiator(threading.Thread):
     def run(self):
         self.final_buffered = self.choose_if_buffered()
         if self.menu.verbose:
-            GSCTradingStrings.chosen_buffered_print(self.final_buffered)
+            GSCTradingStrings.chosen_buffered_print(self.final_buffered, self.is_battle)
+        self.post_func()
