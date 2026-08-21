@@ -6,11 +6,6 @@ import sys
 # From: https://github.com/Squaresweets/TileWorldGBA
 max_packet_size_mb = 0x40
 
-def get_configure_list(us_between_transfer, bytes_for_transfer):
-    config_base = [0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF]
-    config_base += [us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer & 0xFF]
-    return config_base
-
 def read_exact(receiver, num_bytes, max_retries=20):
     data = b''
     while len(data) < num_bytes and max_retries > 0:
@@ -45,7 +40,32 @@ def read_all(receiver, debug=False):
         print("0x%02x " % output)
     return output
 
-def multiboot(receiver, sender, list_sender, path, configure=None):
+def multiboot(receiver, sender, list_sender, path, reconfigure_function, requires_read_after_write):
+
+    def mb_read_exact(num_bytes, max_retries=20):
+        data = b''
+        while len(data) < num_bytes and max_retries > 0:
+            try:
+                chunk = receiver(num_bytes - len(data))
+            except:
+                chunk = b''
+            if chunk is None or len(chunk) == 0:
+                max_retries -= 1
+                continue
+            data += bytes(chunk)
+        return data
+
+    def mb_send(data):
+        sender(data, 4)
+        if requires_read_after_write:
+            mb_read_exact(4)
+
+    def mb_transfer(data):
+        sender(data, 4)
+        if requires_read_after_write:
+            return int.from_bytes(mb_read_exact(4), byteorder='big')
+        return read_all(receiver)
+
     content = 0
     print("Preparing data...")
     content = bytearray(open(path, 'rb').read())
@@ -85,40 +105,25 @@ def multiboot(receiver, sender, list_sender, path, configure=None):
     print("Data preloaded...")
     
     read_all(receiver)
-    if configure is not None:
-        # GBLink 2.x firmware: configured through its command endpoint,
-        # so nothing is echoed back on the data stream here
-        configure(36, 4)
-    else:
-        config_base = get_configure_list(36, 4)
-        list_sender(config_base, chunk_size = len(config_base))
-        val = read_all(receiver)
-
-    # Every transfer is echoed back: read each reply right away,
-    # the 2.x firmware can only hold one unread reply at a time
-    def transfer(word):
-        sender(word, 4)
-        if configure is not None:
-            return int.from_bytes(read_exact(receiver, 4), byteorder='big')
-        return read_all(receiver)
+    reconfigure_function(36, 4, list_sender, receiver)
 
     recv = 0
     while True:
-        recv = transfer(0x6202)
+        recv = mb_transfer(0x6202)
         if (recv >> 16) == 0x7202:
             break
     print("Lets do this thing!")
-    transfer(0x6102)
+    mb_send(0x6102)
 
     for i in range(96):
         out = (int(content[(i*2)])) + (int(content[(i*2)+1]) << 8)
-        transfer(out)
+        mb_send(out)
 
-    transfer(0x6200)
-    transfer(0x6200)
-    transfer(0x63D1)
+    mb_send(0x6200)
+    mb_send(0x6200)
+    mb_transfer(0x63D1)
 
-    token = transfer(0x63D1)
+    token = mb_transfer(0x63D1)
     if ((token >> 24) & 0xFF) != 0x73:
         print("Failed handshake!")
         return
@@ -129,9 +134,9 @@ def multiboot(receiver, sender, list_sender, path, configure=None):
     seed = 0xFFFF00D1 | (crcA << 8)
     crcA = (crcA + 0xF) & 0xFF
 
-    transfer(0x6400 | crcA)
+    mb_transfer(0x6400 | crcA)
 
-    token = transfer((fsize - 0x190) // 4)
+    token = mb_transfer((fsize - 0x190) // 4)
     crcB = (token >> 16) & 0xFF
     print(fsize)
     print("Sending data!")
@@ -144,14 +149,10 @@ def multiboot(receiver, sender, list_sender, path, configure=None):
         complete_sending_data[(i*4)+3] = ((sending_data[i] ^ seed)>>0) & 0xFF
         
     time_transfer = time.time()
-    if configure is not None:
-        # 2.x firmware: read each chunk's echo back to not overrun its reply buffer
-        for i in range(0, len(complete_sending_data), max_packet_size_mb):
-            chunk = complete_sending_data[i:i+max_packet_size_mb]
-            list_sender(chunk, chunk_size = len(chunk))
-            read_exact(receiver, len(chunk))
-    else:
-        list_sender(complete_sending_data, chunk_size = max_packet_size_mb)
+    list_post_transfer_function = None
+    if requires_read_after_write:
+        list_post_transfer_function = mb_read_exact
+    list_sender(complete_sending_data, chunk_size = max_packet_size_mb, post_transfer_function = list_post_transfer_function)
     time_transfer = time.time()-time_transfer
     print(time_transfer)
     
@@ -168,12 +169,12 @@ def multiboot(receiver, sender, list_sender, path, configure=None):
         tmp >>= 1
 
     read_all(receiver)
-    transfer(0x0065)
+    mb_send(0x0065)
     while True:
-        recv = transfer(0x0065)
+        recv = mb_transfer(0x0065)
         if ((recv >> 16) & 0xFFFF) == 0x0075:
             break
 
-    transfer(0x0066)
-    transfer(crcC & 0xFFFF)
+    mb_send(0x0066)
+    mb_send(crcC & 0xFFFF)
     print("DONE!")

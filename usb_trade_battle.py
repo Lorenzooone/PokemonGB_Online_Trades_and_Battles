@@ -17,6 +17,7 @@ epIn = None
 epOut = None
 epCmd = None
 p = None
+out_id = None
 max_usb_timeout_w = 5
 max_usb_timeout_r = 0.1
 max_packet_size = 0x40
@@ -25,8 +26,11 @@ VID = 0xcafe
 PID = 0x4011
 
 # GBLink 2.x firmware
-VID_2 = 0x2fe3
-PID_2 = 0x000a
+VID_GBLink_2 = 0x2fe3
+PID_GBLink_2 = 0x000a
+
+out_id_base = 0
+out_id_gblink2 = 1
 
 path = "pokemon_gen3_to_genx_mb.gba"
 
@@ -35,7 +39,7 @@ def kill_function():
 
 # The 2.x firmware is configured with commands on its own endpoint,
 # instead of the magic packet on the data endpoint
-def configure_fw2(us_between_transfer, bytes_for_transfer):
+def reconfigure_fw2(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver):
     def cmd(data):
         epCmd.write(bytes(data), timeout=int(max_usb_timeout_w * 1000))
     if bytes_for_transfer == 4:
@@ -45,6 +49,19 @@ def configure_fw2(us_between_transfer, bytes_for_transfer):
     cmd([0x00, 0x02])  # set GB Link mode
     time.sleep(0.1)  # give the mode time to start
     cmd([0x30, us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer])  # timing config
+    return 1
+
+def get_configure_list_reconfig_fw(us_between_transfer, bytes_for_transfer):
+    config_base = [0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xCA, 0xFE, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF]
+    config_base += [us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer & 0xFF]
+    return config_base
+
+def reconfigure_reconfig_fw(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver):
+    if list_sender is None:
+        return 0
+    config_base = get_configure_list_reconfig_fw(us_between_transfer, bytes_for_transfer)
+    list_sender(config_base, chunk_size=len(config_base))
+    return multiboot.read_all(raw_receiver)
 
 def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     menu = GSCTradingMenu(kill_function)
@@ -69,13 +86,7 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     result = 1
     while result != 0:
         result = multiboot.read_all(raw_receiver)
-    if epCmd is not None:
-        configure_fw2(us_between_transfer, bytes_for_transfer)
-        ret = 1
-    else:
-        config_base = multiboot.get_configure_list(us_between_transfer, bytes_for_transfer)
-        list_sender(config_base, chunk_size=len(config_base))
-        ret = multiboot.read_all(raw_receiver)
+    ret = get_reconfigurator_function(out_id)(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver)
 
     if is_serial and (ret != 1):
         print("WARNING: Firmware not recognized!\nWhen using Serial, you MUST use a firmware which doesn't alter the output!\nIt's best if you update to the one available at:\nhttps://github.com/Lorenzooone/gb-link-firmware-reconfigurable/releases")
@@ -88,7 +99,7 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
         pre_sleep = True
 
     if menu.multiboot:
-        multiboot.multiboot(raw_receiver, sender, list_sender, path, configure_fw2 if epCmd is not None else None)
+        multiboot.multiboot(raw_receiver, sender, list_sender, path, get_reconfigurator_function(out_id), get_requires_read_after_write(out_id))
         return
 
     trade_c = get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = pre_sleep)
@@ -102,14 +113,18 @@ def sendByte(byte_to_send, num_bytes, **kwargs):
     return
 
 # Code dependant on this connection method
-def sendList(data, chunk_size=8):
+def sendList(data, chunk_size=8, post_transfer_function=None):
     num_iters = int(len(data)/chunk_size)
     for i in range(num_iters):
         epOut.write(data[i*chunk_size:(i+1)*chunk_size], timeout=int(max_usb_timeout_w * 1000))
+        if post_transfer_function is not None:
+            post_transfer_function(chunk_size)
     #print(num_iters*chunk_size)
     #print(len(data))
     if (num_iters*chunk_size) != len(data):
         epOut.write(data[num_iters*chunk_size:], timeout=int(max_usb_timeout_w * 1000))
+        if post_transfer_function is not None:
+            post_transfer_function(len(data[num_iters*chunk_size:]))
 
 def receiveByte(num_bytes=None):
     if num_bytes is None:
@@ -128,14 +143,18 @@ def sendByte_serial(byte_to_send, num_bytes, **kwargs):
     return
 
 # Code dependant on this connection method
-def sendList_serial(data, chunk_size=8):
+def sendList_serial(data, chunk_size=8, post_transfer_function=None):
     num_iters = int(len(data)/chunk_size)
     for i in range(num_iters):
         serial_port.write(bytes(data[i*chunk_size:(i+1)*chunk_size]))
+        if post_transfer_function is not None:
+            post_transfer_function(chunk_size)
     #print(num_iters*chunk_size)
     #print(len(data))
     if (num_iters*chunk_size) != len(data):
         serial_port.write(bytes(data[num_iters*chunk_size:]))
+        if post_transfer_function is not None:
+            post_transfer_function(len(data[num_iters*chunk_size:]))
 
 def receiveByte_serial(num_bytes=None):
     if num_bytes is None:
@@ -153,17 +172,21 @@ def sendByte_win(byte_to_send, num_bytes, **kwargs):
     p.write(byte_to_send.to_bytes(num_bytes, byteorder='big'))
 
 # Code dependant on this connection method
-def sendList_win(data, chunk_size=8):
+def sendList_win(data, chunk_size=8, post_transfer_function=None):
     #Why? Idk. But it fixes it... :/
     if(chunk_size > 0x3C):
         chunk_size = 0x3C
     num_iters = int(len(data)/chunk_size)
     for i in range(num_iters):
         p.write(bytes(data[i*chunk_size:(i+1)*chunk_size]))
+        if post_transfer_function is not None:
+            post_transfer_function(chunk_size)
     #print(num_iters*chunk_size)
     #print(len(data))
     if (num_iters*chunk_size) != len(data):
         p.write(bytes(data[num_iters*chunk_size:]))
+        if post_transfer_function is not None:
+            post_transfer_function(len(data[num_iters*chunk_size:]))
 
 # Code dependant on this connection method
 # The original was so slow, I had to rewrite it a bit to make it work for time sensitive applications
@@ -238,7 +261,7 @@ def signal_handler(sig, frame):
     exit_gracefully()
 
 def libusb_method():
-    global dev, epIn, epOut, epCmd, reattach
+    global dev, epIn, epOut, epCmd, out_id, reattach
     try:
         devices = list(usb.core.find(find_all=True,idVendor=VID, idProduct=PID))
         for d in devices:
@@ -246,7 +269,7 @@ def libusb_method():
             dev = d
         if dev is None:
             # Try the GBLink 2.x firmware
-            devices = list(usb.core.find(find_all=True,idVendor=VID_2, idProduct=PID_2))
+            devices = list(usb.core.find(find_all=True,idVendor=VID_GBLink_2, idProduct=PID_GBLink_2))
             for d in devices:
                 dev = d
             if dev is None:
@@ -263,6 +286,7 @@ def libusb_method():
             assert epIn is not None
             assert epOut is not None
             assert epCmd is not None
+            out_id = out_id_gblink2
             return True
         reattach = False
         if(os.name != "nt"):
@@ -305,10 +329,11 @@ def libusb_method():
         dev.ctrl_transfer(bmRequestType = 1, bRequest = 0x22, wIndex = 2, wValue = 0x01)
     except:
         return False
+    out_id = out_id_base
     return True
 
 def winusbcdc_method():
-    global p
+    global p, out_id
     if(os.name == "nt"):
         try:
             print("Trying WinUSB CDC")
@@ -321,10 +346,11 @@ def winusbcdc_method():
             return False
     else:
         return False
+    out_id = out_id_base
     return True
 
 def serial_method():
-    global serial_port
+    global serial_port, out_id
     try:
         ports = list(serial.tools.list_ports.comports())
         serial_success = False
@@ -339,7 +365,18 @@ def serial_method():
         serial_port = serial.Serial(port=port, bytesize=8, timeout=max_usb_timeout_r, write_timeout = max_usb_timeout_w)
     except Exception as e:
         return False
+    out_id = out_id_base
     return True
+
+def get_reconfigurator_function(curr_out_id):
+    if curr_out_id == out_id_gblink2:
+        return reconfigure_fw2
+    return reconfigure_reconfig_fw
+
+def get_requires_read_after_write(curr_out_id):
+    if curr_out_id == out_id_gblink2:
+        return True # Not Async...
+    return False
 
 signal.signal(signal.SIGINT, signal_handler)
 
