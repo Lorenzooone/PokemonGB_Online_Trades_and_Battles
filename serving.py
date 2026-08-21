@@ -6,12 +6,12 @@ import websockets
 import threading
 import signal
 import os
+import sys
 import boto3
 import botocore
 from random import Random
 from time import sleep
-import http.server
-import socketserver
+import http
 from utilities.trading_version import TradingVersion
 from utilities.high_level_listener import HighLevelListener
 from utilities.gsc_trading import GSCTradingClient
@@ -141,58 +141,6 @@ def convert_file_data_to_mons(data, gen, checks):
         if mon is not None:
             preparing_mons += [mon]
     return preparing_mons
-
-class MyPoolRequestHandler(http.server.SimpleHTTPRequestHandler):
-    '''
-    Class which handles http requests to the pool data server.
-    '''
-    def do_GET(self):
-        """
-        Only answer to pool data GET requests.
-        """
-        gen_to_answer = None
-        if self.path == '/pool1':
-            gen_to_answer = 0
-        if self.path == '/pool2':
-            gen_to_answer = 1
-        if self.path == '/pool3':
-            gen_to_answer = 2
-        if gen_to_answer is not None:
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(bytes(convert_mons_to_file_data(gen_to_answer)))
-        else:
-            self.send_response(400)
-            self.end_headers()
-
-    def do_POST(self):
-        """
-        Only answer to pool data GET requests.
-        """
-        self.send_response(400)
-        self.end_headers()
-
-class PoolDataServer (threading.Thread):
-    '''
-    Class which handles responding to the pool data requests.
-    '''
-    def __init__(self, host="", port=11112):
-        threading.Thread.__init__(self)
-        self.daemon=True
-        self.host = host
-        try:
-            self.port = int(os.environ["POOL_DATA_PORT"])
-        except KeyError as e:
-            self.port = port
-                
-    def run(self):
-        """
-        Runs the server in a second Thread in order to keep
-        the program responsive.
-        """
-        with socketserver.TCPServer((self.host, self.port), MyPoolRequestHandler) as httpd:
-            print("serving pool data at port", self.port)
-            httpd.serve_forever()
 
 class ServerUtils:
     saved_mons_path = "pool_mons"
@@ -1034,17 +982,66 @@ class WebsocketServer (threading.Thread):
                 time_disconnect = pool_trade_timeout_timer_seconds
 
         remove_ws_connection()
-                
+
+    def shared_base_http_handler(self, path):
+        gen_to_answer = None
+        if path == '/pooldata1':
+            gen_to_answer = 0
+        if path == '/pooldata2':
+            gen_to_answer = 1
+        if path == '/pooldata3':
+            gen_to_answer = 2
+        if gen_to_answer is not None:
+            return bytes(convert_mons_to_file_data(gen_to_answer))
+        return None
+
+    def old_base_http_handler(self, path, request_headers):
+        ret = self.shared_base_http_handler(path)
+        if ret is None:
+            return None
+        headers = [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(ret)))]
+        return http.HTTPStatus.OK, headers, ret
+
+    def new_base_htpp_handler(self, connection, request):
+        ret = self.shared_base_http_handler(request.path)
+        if ret is None:
+            return None
+        headers = websockets.datastructures.Headers()
+        headers["Content-Type"] = "application/octet-stream"
+        headers["Content-Length"] = str(len(ret))
+        return websockets.http11.Response(http.HTTPStatus.OK, "OK", headers, ret)
+
+    def get_base_htpp_handler(self):
+        if (sys.version_info[0] <= 3) and (sys.version_info[1] < 11):
+            return self.old_base_http_handler
+        return self.new_base_htpp_handler
+
+    async def new_handler(websocket):
+        await WebsocketServer.handler(websocket, websocket.request.path)
+
+    def get_handler_method(self):
+        if (sys.version_info[0] <= 3) and (sys.version_info[1] < 13):
+            return WebsocketServer.handler
+        return WebsocketServer.new_handler
+
+    async def server_runner(self):
+        from websockets.asyncio.server import serve
+        server = await serve(self.get_handler_method(), self.host, self.port, process_request = self.get_base_htpp_handler())
+        await server.serve_forever()
+
     def run(self):
         """
         Runs the server in a second Thread in order to keep
         the program responsive.
         """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        start_server = websockets.serve(WebsocketServer.handler, self.host, self.port)
-        loop.run_until_complete(start_server)
-        loop.run_forever()
+        if (sys.version_info[0] <= 3) and (sys.version_info[1] < 14):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            start_server = websockets.serve(self.get_handler_method(), self.host, self.port, process_request = self.get_base_htpp_handler())
+            loop.run_until_complete(start_server)
+            loop.run_forever()
+        else:
+            asyncio.run(self.server_runner())
 
 def exit_gracefully():
     os._exit(1)
@@ -1053,17 +1050,16 @@ def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
     exit_gracefully()
 
-init_base_data()
-currently_open_connections = 0
-GSCUtils()
-RBYUtils()
-RSESPUtils()
-ws = WebsocketServer()
-ws.start()
-pds = PoolDataServer()
-pds.start()
+if __name__ == "__main__":
+    init_base_data()
+    currently_open_connections = 0
+    GSCUtils()
+    RBYUtils()
+    RSESPUtils()
+    ws = WebsocketServer()
+    ws.start()
 
-signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
 
-while True:
-    sleep(1)
+    while True:
+        sleep(1)
