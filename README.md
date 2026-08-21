@@ -30,7 +30,7 @@ Python >= 3.6 is required in order to run this.
 
 Required packages are found inside requirements.txt.
 
-They can be installed by using `pip install -r requirements.txt`.
+They can be installed by using `pip install -r requirements_local.txt`.
 
 ## Using the GB Link Cable to USB Adapter
 Run `python ./usb_trade_battle.py`.

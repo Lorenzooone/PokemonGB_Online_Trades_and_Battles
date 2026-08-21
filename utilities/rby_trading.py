@@ -143,6 +143,7 @@ class RBYTrading(GSCTrading):
         just_sent = None
 
         while not self.is_version_check_done:
+            self.swap_byte(self.no_input)
             self.sleep_func()
         if self.server_version is not None:
             send_data[0] = self.force_receive(self.comms.get_random)

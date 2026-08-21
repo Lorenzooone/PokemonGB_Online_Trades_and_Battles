@@ -215,13 +215,15 @@ class ServerUtils:
         """
         Loads the Pool's Pokémon from file.
         """
+        raw_data = None
         try:
             s3.download_file(Bucket="pokemon-gb-online-pool-gen1", Key=ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop, Filename="./" + ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
             raw_data = GSCUtilsMisc.read_data(ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
             print("Downloaded gen " + str(gen + 1))
         except botocore.exceptions.NoCredentialsError:
             raw_data = GSCUtilsMisc.read_data(ServerUtils.default_path + ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
-
+        except Exception as e:
+            print('Download error: ', str(e))
         preparing_mons = convert_file_data_to_mons(raw_data, gen, checks)
         if len(preparing_mons) > 0:
             in_use_mons[gen] = set()
