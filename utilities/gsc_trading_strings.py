@@ -33,8 +33,9 @@ class GSCTradingStrings:
     io_error_str = "I/O error({0}): {1}"
     unknown_error_str = "Unexpected error:"
     unrecognized_character_str = "UNRECOGNIZED CHARACTER: {letter}"
-    error_byte_dropped_str = "\nError! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered {kind} instead!"
-    warning_byte_dropped_str = "\nWarning! At least one byte was not properly transfered!\nIf this happens often, you might want to do a buffered {kind} instead!"
+    buffered_suggestion_str = "\nIf this happens often, you might want to do a Buffered {kind} instead!"
+    error_byte_dropped_str = "\nError! At least one byte was not properly transfered!" + buffered_suggestion_str
+    warning_byte_dropped_str = "\nWarning! At least one byte was not properly transfered!" + buffered_suggestion_str
     byte_transfer_str = "{send_data} - {recv}"
     crtlc_str = 'You pressed Ctrl+C!'
     waiting_transfer_start_str = "Waiting for the transfer to start..."

@@ -691,6 +691,8 @@ class GSCBattling(GSCTrading):
                             break
                 if not success:
                     print(GSCTradingStrings.battle_data_error_initial_str)
+                    if not buffered:
+                        print(GSCTradingStrings.buffered_suggestion_str.format(kind=self.kind_str))
                     break
             # Start interacting with the trading menu
             self.do_battle(self.comms.get_chosen_option, close=not valid)

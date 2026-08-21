@@ -40,6 +40,9 @@ def kill_function():
 # The 2.x firmware is configured with commands on its own endpoint,
 # instead of the magic packet on the data endpoint
 def reconfigure_fw2(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver):
+    if epCmd is None:
+        print("\nMISSING EP CMD!\nDisabling firmware reconfiguration!\n")
+        return 0
     def cmd(data):
         epCmd.write(bytes(data), timeout=int(max_usb_timeout_w * 1000))
     if bytes_for_transfer == 4:
@@ -332,25 +335,54 @@ def libusb_method():
     out_id = out_id_base
     return True
 
+class WinUsbCDCEPCMD:
+    def __init__(self, p):
+        self.p = p
+
+    def write(self, data, timeout=1000):
+        # Trick ComPort to write to _ep_cmd...
+        epOut = self.p._ep_out
+        self.p._ep_out = p._ep_cmd
+        self.p.write(data)
+        self.p._ep_out = epOut
+
 def winusbcdc_method():
-    global p, out_id
+    global p, out_id, epCmd
+    curr_out_id = out_id_base
     if(os.name == "nt"):
         try:
             print("Trying WinUSB CDC")
             p = ComPort(vid=VID, pid=PID)
             if not p.is_open:
-                return False
+                p = ComPort(vid=VID_GBLink_2, pid=PID_GBLink_2)
+                curr_out_id = out_id_gblink2
+                if not p.is_open:
+                    return False
+                # Fix possible issues with maximum_packet_size
+                p.change_interface(0)
+                int2_desc = p.query_interface_settings(0)
+                pipe_list = map(p.query_pipe, range(int2_desc.b_num_endpoints))
+                p._ep_out = 2
+                p._ep_in = 0x82
+                p._ep_cmd = 1
+                p.maximum_packet_size = 0xFFFFFFFF
+                for item in pipe_list:
+                    if (item.pipe_id == p._ep_out) or (item.pipe_id == p._ep_in):
+                        p.maximum_packet_size = min(item.maximum_packet_size, p.maximum_packet_size)
+                epCmd = WinUsbCDCEPCMD(p)
             #p.baudrate = 115200
             p.settimeout(max_usb_timeout_r)
         except:
             return False
     else:
         return False
-    out_id = out_id_base
+    
+    out_id = curr_out_id
     return True
 
 def serial_method():
     global serial_port, out_id
+    curr_out_id = out_id_base
     try:
         ports = list(serial.tools.list_ports.comports())
         serial_success = False
@@ -359,6 +391,10 @@ def serial_method():
             if(device.vid is not None) and (device.pid is not None):
                 if(device.vid == VID) and (device.pid == PID):
                     port = device.device
+                    break
+                if(device.vid == VID_GBLink_2) and (device.pid == PID_GBLink_2):
+                    port = device.device
+                    curr_out_id = out_id_gblink2
                     break
         if port is None:
             return False
