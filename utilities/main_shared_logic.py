@@ -11,6 +11,7 @@ from .websocket_client import PoolTradeRunner, ProxyConnectionRunner, ProxyBattl
 from utilities.gsc_trading_strings import GSCTradingStrings
 
 def start_logic(trade_c, menu):
+    print(GSCTradingStrings.recap_str.format(gen=menu.gen, room=menu.room, recap_option_selected=GSCTradingStrings.get_recap_option_selected(menu)))
     if menu.is_battle:
         trade_c.player_trade(menu.buffered)
     if menu.trade_type == GSCTradingStrings.two_player_trade_str:

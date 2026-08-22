@@ -32,6 +32,10 @@ Required packages are found inside requirements.txt.
 
 They can be installed by using `pip install -r requirements_local.txt`.
 
+Alternatively, `python -m pip install -r requirements_local.txt` can also be used.
+
+Optionally, a virtual environment may be setup with `python -m venv local_env ; source local_env/bin/activate`.
+
 ## Using the GB Link Cable to USB Adapter
 Run `python ./usb_trade_battle.py`.
 If the adapter is inserted, it should be detected.

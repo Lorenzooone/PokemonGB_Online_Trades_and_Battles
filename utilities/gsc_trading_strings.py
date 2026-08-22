@@ -86,6 +86,10 @@ class GSCTradingStrings:
     battle_problem_command_other_str = "Issue detected with command sent by other player!\nClosing battle!"
     battle_problem_command_own_str = "Issue detected with command sent by player!\nClosing battle!"
     battle_data_error_initial_str = "ERROR WITH OTHER PLAYER'S DATA!\nSOMETHING CHANGED! ABORTING BATTLE!"
+    recap_str = "\nSelected Gen {gen}, {recap_option_selected}, Room {room}\n"
+    two_player_trade_long_str = "2 Player Trade"
+    two_player_battle_long_str = "2 Player Battle"
+    pool_trade_long_str = "Pool Trade"
     two_player_trade_str = "2P"
     two_player_battle_str = "2B"
     pool_trade_str = "PT"
@@ -172,6 +176,15 @@ class GSCTradingStrings:
         if is_battle:
             return GSCTradingStrings.kind_battle_str
         return GSCTradingStrings.kind_trade_str
+
+    def get_recap_option_selected(menu):
+        if menu.is_battle:
+            return GSCTradingStrings.two_player_battle_long_str
+        if menu.trade_type == GSCTradingStrings.two_player_trade_str:
+            return GSCTradingStrings.two_player_trade_long_str
+        if menu.trade_type == GSCTradingStrings.pool_trade_str:
+            return GSCTradingStrings.pool_trade_long_str
+        return "?????"
     
     def buffered_negotiation_print(buffered, is_battle):
         print(GSCTradingStrings.buffered_negotiation_str.format(other_buffered=GSCTradingStrings.get_buffered_str(not buffered), kind=GSCTradingStrings.get_kind_str(is_battle)))
