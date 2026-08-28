@@ -999,7 +999,7 @@ class WebsocketServer (threading.Thread):
         ret = self.shared_base_http_handler(path)
         if ret is None:
             return None
-        headers = [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(ret)))]
+        headers = [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(ret))), ("Access-Control-Allow-Origin", "*")]
         return http.HTTPStatus.OK, headers, ret
 
     def new_base_htpp_handler(self, connection, request):
@@ -1009,6 +1009,7 @@ class WebsocketServer (threading.Thread):
         headers = websockets.datastructures.Headers()
         headers["Content-Type"] = "application/octet-stream"
         headers["Content-Length"] = str(len(ret))
+        headers["Access-Control-Allow-Origin"] = "*"
         return websockets.http11.Response(http.HTTPStatus.OK, "OK", headers, ret)
 
     def get_base_htpp_handler(self):
