@@ -45,6 +45,14 @@ Run `python ./emulator_trade_battle.py`.
 Once you're out of the program's menu, and you have started BGB, you can then left click on the actively running BGB window, and click Link->Connect->Ok.
 It should connect to the emulator, once that is done.
 
+## Bridging between an emulator and hardware
+You can use this project to connect a game running in BGB to actual gameboy hardware with the GBLink asapter. To do this run both programs simultaneously:
+
+1. In one terminal run `python ./usb_trade_battle.py` to connect to the physical hardware
+2. In another terminal run `python ./emulator_trade_battle.py` to connect to the emulator
+
+Make sure to use the same room code when asked.
+
 ## Notes on Battles using Gen1 games
 
 Please be careful about using the moves Counter, Mirror Move, Psywave, Fly , Dig and Mimic, as they may cause issues.
