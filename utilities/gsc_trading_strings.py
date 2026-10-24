@@ -81,6 +81,7 @@ class GSCTradingStrings:
     buffered_negotiation_str = '\nThe other player wants to do a {other_buffered} {kind}.\nWould you like to switch to a {other_buffered} {kind}?'
     buffered_other_negotiation_str = "\nAsking the other player whether they're willing to do a {own_buffered} {kind}..."
     buffered_chosen_str = "\nDecided to do a {own_buffered} {kind}."
+    buffered_forced_str = "\nForced a Buffered {kind}."
     received_buffered_data_str = "\nReceived the {kind} data from the other player!\nYou can now start the real {kind}."
     no_recycle_data_str = "\nBoth players' input is required.\nRestarting the trade from scratch."
     no_move_other_data_str = "\nThe other player's input was not required.\nSkipping receiving their moves data."
@@ -225,6 +226,9 @@ class GSCTradingStrings:
         print(GSCTradingStrings.buffered_chosen_str.format(own_buffered = GSCTradingStrings.get_buffered_str(buffered), kind=GSCTradingStrings.get_kind_str(is_battle)))
         if buffered:
             print(GSCTradingStrings.buffered_sit_table_str.format(kind_ing=GSCTradingStrings.get_kind_ing_str(is_battle)))
+    
+    def forced_buffered_print(is_battle):
+        print(GSCTradingStrings.buffered_forced_str.format(kind=GSCTradingStrings.get_kind_str(is_battle)))
             
     def game_selector_menu_print():
         print(GSCTradingStrings.game_selector_menu_str)

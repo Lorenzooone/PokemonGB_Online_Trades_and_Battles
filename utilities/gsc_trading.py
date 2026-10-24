@@ -51,6 +51,7 @@ class GSCTradingClient:
     """
     base_folder = "useful_data/gsc/"
     transfers_class = GSCTradingClientTransfers
+    force_buffered_value = 0x91
     buffered_value = 0x85
     not_buffered_value = 0x12
     need_data_value = 0x72
@@ -378,6 +379,8 @@ class GSCTradingClient:
         val = self.not_buffered_value
         if buffered:
             val = self.buffered_value
+        if str(buffered) == "Forced":
+            val = self.force_buffered_value
         self.send_single_byte(self.transfers_class.buffered_transfer, val)
     
     def get_buffered_data(self):
@@ -391,6 +394,8 @@ class GSCTradingClient:
                 buffered = True
             elif val == self.not_buffered_value:
                 buffered = False
+            elif val == self.force_buffered_value:
+                buffered = "Forced"
         return buffered
     
     def send_need_data(self, needs_data):

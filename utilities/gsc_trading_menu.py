@@ -420,7 +420,10 @@ class GSCBufferedNegotiator(threading.Thread):
         buffered = self.buffered
         self.comms.send_buffered_data(buffered)
         other_buffered = self.force_receive(self.comms.get_buffered_data)
-        if buffered == other_buffered:
+        if (str(buffered) == "Forced") or (str(other_buffered) == "Forced"):
+            GSCTradingStrings.forced_buffered_print(self.is_battle)
+            return True
+        if (buffered == other_buffered):
             return buffered
         change_buffered = None
         while change_buffered is None:
@@ -438,6 +441,9 @@ class GSCBufferedNegotiator(threading.Thread):
                 buffered = self.menu.handle_buffered_change_offer(buffered, self.is_battle)
                 self.comms.send_buffered_data(buffered)
             change_buffered = not change_buffered
+            if (str(buffered) == "Forced") or (str(other_buffered) == "Forced"):
+                GSCTradingStrings.forced_buffered_print(self.is_battle)
+                return True
         return buffered
     
     def get_chosen_buffered(self):
