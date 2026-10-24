@@ -12,14 +12,14 @@ from .websocket_client import PoolTradeRunner, ProxyConnectionRunner, ProxyBattl
 from utilities.gsc_trading_strings import GSCTradingStrings
 from .text_conversions import PokemonNamesForGen
 
-def start_logic(trade_c, menu):
+def start_logic(trade_c, menu, client_type):
     print(GSCTradingStrings.recap_str.format(gen=menu.gen, room=menu.room, recap_option_selected=GSCTradingStrings.get_recap_option_selected(menu)))
     if menu.is_battle:
-        trade_c.player_trade(menu.buffered)
+        trade_c.player_trade(menu.buffered, client_type)
     if menu.trade_type == GSCTradingStrings.two_player_trade_str:
-        trade_c.player_trade(menu.buffered)
+        trade_c.player_trade(menu.buffered, client_type)
     elif menu.trade_type == GSCTradingStrings.pool_trade_str:
-        trade_c.pool_trade()
+        trade_c.pool_trade(client_type)
 
 def get_connection(menu, kill_function):
     connection = None

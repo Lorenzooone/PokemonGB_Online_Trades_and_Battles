@@ -14,6 +14,7 @@ class RSESPTradingClientTransfers:
     choice_transfer = "CH3S"
     version_client_transfer = "VEC3"
     version_server_transfer = "VES3"
+    client_type_transfer = "CLN3"
     accept_transfer = ["A3S1", "A3S2"]
     success_transfer = ["S3S1", "S3S2", "S3S3", "S3S4", "S3S5", "S3S6", "S3S7"]
     random_data_transfer = "RAN3" # Needed by server, unused...
@@ -33,6 +34,7 @@ class RSESPTradingClientTransfers:
         success_transfer[6] : {1 + 3}, # Counter + Success
         version_client_transfer : {6}, # Client's version value
         version_server_transfer : {6}, # Server's version value
+        client_type_transfer : {4} # Client type
     }
 
 class RSESPTradingClient(GSCTradingClient):
@@ -638,7 +640,7 @@ class RSESPTrading(GSCTrading):
         """
         return self.first_trade_index | self.other_pokemon.pokemon[0].get_species()
 
-    def player_trade(self, buffered):
+    def player_trade(self, buffered, client_type):
         """
         Handles trading with another player.
         Optimizes the data exchanges by executing them only
@@ -648,6 +650,7 @@ class RSESPTrading(GSCTrading):
         self.reset_trade()
         self.menu.buffered = True
         self.comms.send_client_version()
+        self.comms.send_client_type_data(client_type)
         self.exit_or_new = True
         valid = True
         while True:
@@ -658,7 +661,7 @@ class RSESPTrading(GSCTrading):
             if self.do_trade(self.comms.get_chosen_mon, close=not valid):
                 break
 
-    def pool_trade(self):
+    def pool_trade(self, client_type):
         """
         Handles trading with the Pool.
         """
@@ -666,6 +669,7 @@ class RSESPTrading(GSCTrading):
         self.reset_trade()
         self.menu.buffered = True
         self.comms.send_client_version()
+        self.comms.send_client_type_data(client_type)
         self.max_level = self.menu.max_level
         while True:
             # Get data from the server and then use it to start the trade

@@ -6,6 +6,7 @@ from time import sleep
 from utilities.gsc_trading_menu import GSCTradingMenu
 from utilities.main_shared_logic import get_connection, get_data_trader_class, start_logic
 from utilities.gsc_trading_strings import GSCTradingStrings
+from utilities.trading_client_type import TradingClientType
 import datetime
 
 class PokeTrader:
@@ -85,7 +86,7 @@ def transfer_func(p, menu):
     trade_c = get_data_trader_class(p.sendByte, p.receiveByte, p.connection, menu, kill_function)
     
     if menu.gen != 3:
-        start_logic(trade_c, menu)
+        start_logic(trade_c, menu, TradingClientType.python_emu_bgb)
 
 menu = GSCTradingMenu(kill_function, is_emulator=True)
 menu.handle_menu()

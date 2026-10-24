@@ -19,6 +19,7 @@ class RBYTradingClientTransfers:
     negotiation_transfer = "NEG1"
     version_client_transfer = "VEC1"
     version_server_transfer = "VES1"
+    client_type_transfer = "CLN1"
     random_data_transfer = "RAN1"
     need_data_transfer = "ASK1"
     possible_transfers = {
@@ -34,6 +35,7 @@ class RBYTradingClientTransfers:
         negotiation_transfer : {1 + 1}, # Counter + Convergence value
         version_client_transfer : {6}, # Client's version value
         version_server_transfer : {6}, # Server's version value
+        client_type_transfer : {4}, # Client type
         random_data_transfer : {10}, # Random values from server
         need_data_transfer : {1 + 1} # Counter + Whether it needs the other player's data
     }

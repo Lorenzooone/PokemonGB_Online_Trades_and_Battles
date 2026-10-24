@@ -5,6 +5,7 @@ from .trading_version import TradingVersion
 from .gsc_trading_data_utils import *
 from .gsc_trading_menu import GSCBufferedNegotiator
 from .gsc_trading_strings import GSCTradingStrings
+from utilities.trading_client_type import TradingClientType
 
 class GSCTradingClientTransfers:
     full_transfer = "FLL2"
@@ -18,6 +19,7 @@ class GSCTradingClientTransfers:
     buffered_transfer = "BUF2"
     language_transfer = "LNG2"
     negotiation_transfer = "NEG2"
+    client_type_transfer = "CLN2"
     version_client_transfer = "VEC2"
     version_server_transfer = "VES2"
     random_data_transfer = "RAN2"
@@ -36,6 +38,7 @@ class GSCTradingClientTransfers:
         negotiation_transfer : {1 + 1}, # Counter + Convergence value
         version_client_transfer : {6}, # Client's version value
         version_server_transfer : {6}, # Server's version value
+        client_type_transfer : {4}, # Client type
         random_data_transfer : {10}, # Random values from server
         need_data_transfer : {1 + 1} # Counter + Whether it needs the other player's data
     }
@@ -442,6 +445,21 @@ class GSCTradingClient:
         if val is None:
             return val
         return val[0]
+    
+    def send_client_type_data(self, client_type):
+        """
+        Handles sending the client's type.
+        """
+        self.connection.send_data(self.transfers_class.client_type_transfer, GSCUtilsMisc.write_int_le_to_buffer(client_type))
+    
+    def get_client_type_data(self):
+        """
+        Handles getting the other client's type.
+        """
+        val = self.connection.recv_data(self.transfers_class.client_type_transfer)
+        if val is None:
+            return val
+        return GSCUtilsMisc.read_int_le(val, 0)
 
 class GSCTrading:
     """
@@ -1437,6 +1455,7 @@ class GSCTrading:
     def do_version_check(self, do_swap_byte = False):
         self.is_running_compat_3_mode = True
         self.other_language = None
+        self.other_client_type = None
         self.is_gen2_new_mail = False
         self.is_new_synch_protocol = False
         self.server_version = self.attempt_receive(self.comms.get_server_version, 5, do_swap_byte = do_swap_byte)
@@ -1445,10 +1464,16 @@ class GSCTrading:
             if other_client_version is not None:
                 self.is_running_compat_3_mode = False
             if TradingVersion.is_version_greater_equal_than(other_client_version, 4, 2, 0):
+                # Unused for now... But send and receive regardless!
+                self.other_client_type = self.attempt_receive(self.comms.get_client_type_data, 5, do_swap_byte = do_swap_byte)
+                #print(TradingClientType.get_text_for_client_type(self.other_client_type))
+
+                # Used to determine how to patch the text, if needed
                 self.other_language = self.attempt_receive(self.comms.get_language_data, 5, do_swap_byte = do_swap_byte)
                 # Special case for server, which has all languages
                 if self.other_language == 0xFF:
                     self.other_language = None
+
                 self.is_gen2_new_mail = True
                 self.is_new_synch_protocol = True
                 #print("Version >= 4.2.0")
@@ -1611,7 +1636,7 @@ class GSCTrading:
         self.comms.send_big_trading_data(self.create_sendable_big_trading_data())
         return valid
 
-    def player_trade(self, buffered):
+    def player_trade(self, buffered, client_type):
         """
         Handles trading with another player.
         Optimizes the data exchanges by executing them only
@@ -1627,6 +1652,7 @@ class GSCTrading:
         self.is_new_synch_protocol = False
         self.comms.send_client_version()
         self.comms.send_language_data()
+        self.comms.send_client_type_data(client_type)
         buf_neg = GSCBufferedNegotiator(self.menu, self.comms, buffered, self.sleep_func, self.do_version_check)
         buf_neg.start()
         # Start of what the player sees. Enters the room
@@ -1669,7 +1695,7 @@ class GSCTrading:
             # Start interacting with the trading menu
             self.do_trade(self.comms.get_chosen_mon, close=not valid)
 
-    def pool_trade(self):
+    def pool_trade(self, client_type):
         """
         Handles trading with the Pool.
         """
@@ -1685,6 +1711,8 @@ class GSCTrading:
         self.other_language = None
         self.menu.buffered = True
         self.comms.send_client_version()
+        self.comms.send_language_data()
+        self.comms.send_client_type_data(client_type)
         # Start of what the player sees. Enters the room
         self.enter_room()
         while True:
@@ -1694,10 +1722,10 @@ class GSCTrading:
 
             # Get data from the server and then use it to start the trade
             if self.other_pokemon is None:
+                self.do_version_check()
                 self.verbose_print(GSCTradingStrings.pool_receive_data_str)
                 self.other_pokemon = self.force_receive(self.comms.get_pool_trading_data)
                 self.other_pokemon.patch_out_bad_chars_for_language_buffered_only(None, self.menu.language)
-                self.do_version_check()
             else:
                 self.verbose_print(GSCTradingStrings.pool_recycle_data_str)
             data, data_other = self.trade_starting_sequence(True, send_data=self.other_pokemon.create_trading_data(self.special_sections_len))

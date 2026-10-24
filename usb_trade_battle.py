@@ -9,6 +9,7 @@ import multiboot
 from utilities.gsc_trading_menu import GSCTradingMenu
 from utilities.main_shared_logic import get_connection, get_data_trader_class, start_logic
 from utilities.gsc_trading_strings import GSCTradingStrings
+from utilities.trading_client_type import TradingClientType
 
 dev = None
 reattach = False
@@ -107,7 +108,7 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
     trade_c = get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = pre_sleep)
     connection.start()
 
-    start_logic(trade_c, menu)
+    start_logic(trade_c, menu, TradingClientType.python_usb)
 
 # Code dependant on this connection method
 def sendByte(byte_to_send, num_bytes, **kwargs):

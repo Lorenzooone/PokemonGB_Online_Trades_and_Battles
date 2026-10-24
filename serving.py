@@ -25,6 +25,7 @@ from utilities.gsc_trading_data_utils import *
 from utilities.rby_trading_data_utils import *
 from utilities.rse_sp_trading_data_utils import *
 from utilities.text_conversions import PokemonNamesForGen, PokemonBadWordsFilter
+from utilities.trading_client_type import TradingClientType
 
 server_is_debug = False
 server_do_local_download_if_failure = False
@@ -355,6 +356,7 @@ class PoolTradeServer:
                 self.trading_client_class.transfers_class.success_transfer: self.handle_get_success,
                 self.trading_client_class.transfers_class.version_client_transfer: self.handle_get_client_version,
                 self.trading_client_class.transfers_class.version_server_transfer: self.handle_get_server_version,
+                self.trading_client_class.transfers_class.client_type_transfer: self.handle_get_client_type,
                 self.trading_client_class.transfers_class.language_transfer : self.handle_get_client_language,
                 self.trading_client_class.transfers_class.random_data_transfer: self.handle_get_random_data
             }
@@ -383,6 +385,7 @@ class PoolTradeServer:
                 self.trading_client_class.transfers_class.success_transfer[6]: self.handle_get_success3_6,
                 self.trading_client_class.transfers_class.version_client_transfer: self.handle_get_client_version,
                 self.trading_client_class.transfers_class.version_server_transfer: self.handle_get_server_version,
+                self.trading_client_class.transfers_class.client_type_transfer: self.handle_get_client_type,
                 self.trading_client_class.transfers_class.random_data_transfer: self.handle_get_random_data
             }
             self.send_handlers = {
@@ -452,6 +455,9 @@ class PoolTradeServer:
             else:
                 mon_data_to_add = self.utils_class.single_mon_to_data(self.mon[0], self.mon[1])
             return self.hll.prepare_send_data(out_transfer_tag, [self.own_id] + mon_data_to_add)
+    
+    def handle_get_client_type(self):
+        return self.hll.prepare_send_data(self.trading_client_class.transfers_class.client_type_transfer, GSCUtilsMisc.write_int_le_to_buffer(TradingClientType.python_server))
     
     def handle_get_client_version(self):
         return ServerSpecificTransfers.handle_get_version(self.hll, self.trading_client_class.transfers_class.version_client_transfer)

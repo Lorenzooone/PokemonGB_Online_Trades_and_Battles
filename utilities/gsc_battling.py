@@ -643,7 +643,7 @@ class GSCBattling(GSCTrading):
 
         return
 
-    def player_battle(self, buffered):
+    def player_battle(self, buffered, client_type):
         """
         Handles battling with another player.
         Optimizes the data exchanges by executing them only
@@ -659,6 +659,8 @@ class GSCBattling(GSCTrading):
         #buffered = False # Force non-buffered for now...
         self.is_version_check_done = False
         self.comms.send_client_version()
+        self.comms.send_language_data()
+        self.comms.send_client_type_data(client_type)
         buf_neg = GSCBufferedNegotiator(self.menu, self.comms, buffered, self.sleep_func, self.post_buffered_negotiation_init, is_battle = True)
         buf_neg.start()
         # Start of what the player sees. Enters the room
@@ -708,6 +710,6 @@ class GSCBattling(GSCTrading):
                 self.reset_trade()
                 self.force_receive(self.comms.get_reseed_server)
 
-    def player_trade(self, buffered):
+    def player_trade(self, buffered, client_type):
         # Abuse classes to avoid writing duplicated code...
-        self.player_battle(buffered)
+        self.player_battle(buffered, client_type)
