@@ -1,5 +1,6 @@
 from .gsc_trading import GSCTrading
 from .gsc_trading_jp import GSCTradingJP
+from .gsc_trading_kor import GSCTradingKOR
 from .gsc_battling import GSCBattling
 from .gsc_battling_jp import GSCBattlingJP
 from .rby_trading import RBYTrading
@@ -9,6 +10,7 @@ from .rby_battling_jp import RBYBattlingJP
 from .rse_sp_trading import RSESPTrading
 from .websocket_client import PoolTradeRunner, ProxyConnectionRunner, ProxyBattleConnectionRunner
 from utilities.gsc_trading_strings import GSCTradingStrings
+from .text_conversions import PokemonNamesForGen
 
 def start_logic(trade_c, menu):
     print(GSCTradingStrings.recap_str.format(gen=menu.gen, room=menu.room, recap_option_selected=GSCTradingStrings.get_recap_option_selected(menu)))
@@ -43,6 +45,8 @@ def get_data_trader_class(sender, receiver, connection, menu, kill_function, pre
         else:
             if menu.japanese:
                 trade_c = GSCTradingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
+            elif menu.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+                trade_c = GSCTradingKOR(sender, receiver, connection, menu, kill_function, pre_sleep)
             else:
                 trade_c = GSCTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
     elif menu.gen == 3:

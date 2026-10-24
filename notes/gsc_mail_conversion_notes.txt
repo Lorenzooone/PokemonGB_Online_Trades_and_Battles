@@ -1,0 +1,125 @@
+Priority: 1) Keeping the data from the trainer, 2) Keeping the message data (though less important, still significant)
+
+Buffered trade needed for different mail data structures, no need to worry about synchronous trade...
+
+English:
+Characters 0x -4x are "not ideal".
+Control characters within 0x00 and 0x60 to be careful of.
+
+Japanese:
+All characters (except control ones) are allowed...
+Control characters within 0x00 and 0x60 to be careful of.
+
+Korean:
+Characters 0x46, 0x47, 0x48 and 0x4D are control characters (unlike in other languages).
+Control characters within 0x00 and 0x60 to be careful of.
+Aside from that, 0x00-0x0B are table characters. Technically 0x00 never used for tables...
+After a table character, most characters are allowed (except 0x50-0x60). Need to handle this...
+All user inputs are going to be 2 byte characters.
+
+Japanese to English:
+0x21 (0x20) bytes + 0x8 (7) bytes for the name. Mark as "J", to "save" that it's from a Japanese mail and that it's going to be fine.
+Since control characters match, direct copying is going to be fine... Probably.
+Will need to convert 0x46, 0x47, 0x48 and 0x4D. 0xE8, 0xEF, 0xF5, 0x75.
+
+English to Japanese:
+0x21 (0x20) bytes + 5 bytes for the name (2 name bytes missing). Could use a non-immissible code to keep information that the mail is actually "English-speaking". If I then keep track of all the usable letters in english, this could maybe be used to carve out a single bit per byte of text. With 0x25 bytes of usable text, this could be used to maintain the missing letters from the conversion...? As well as keeping track of the language of origin?
+Those would require 7 bits for the 2 letters, plus 7 bits for the starting byte I'd be replacing. Meaning there would be 16 bits left for the language stuff and whatever we want... Need to be careful about control codes though... Consider adding an EOL byte asap in the mail to save bits. This lowers the amount of bits by 8, but language stuff only needs 3 bits to work properly, so... That or I assign the different languages different initial values, and then I should still have access to 8 bits if I end early, meaning I can at least print 9 characters. Saying this as even when accounting for bad characters, trainer stuff should translate esily instead.
+
+Korean to English:
+0x21 (0x20) bytes + 0x8 (7) bytes for the name (0x20 bytes missing from message and 3 name bytes missing).
+Mark as "K" to save it's from Korean mail.
+Each Korean character (2 bytes, or 16 bits) can be packed in 12.5 bits (8 for the byte to be displayed, 1 bit for a "bad English byte", 3.75 bits for the corresponding 0-B table). Technically there are 320 (realistically 312, probably less due to the newline, which is not fixed in KOR) bits available, accounting for 24 characters (23 with the newline issue, which does become the 24th character technically). Removing the 5 of the trainer, this means 19 characters could be fit in theory (instead of the base 16 while cutting the trainer to just 2, for a net gain of 6 bytes without displaying bad stuff).
+There would be 3 bytes for "bad Englsh byte" and 12 bytes for the table. The 3 "bad English bytes" can be hidden after the end of the trainer name, with four bytes of the trainer name going to the message part (avoid abusing the extra "language byte" to keep compatibility with Japanese, since we only need one, not two, hence the 312). For the 12 bytes, they can be in the message, but if the resulting value is a "bad English byte" (a control code), they can be converted to values that would normally be impossible with just 4 bit table (0-B) selection. Due to Japanese compatibility, bytes 0 of the message data and [5, 6] of the author data can get reset, so the last bytes must go there to keep the rest of the message coherent.
+Technically it is 12.5 bits per Korean character by abusing the fact that there are 11 possible tables, meaning two chars have "just" 121 possible table values.
+______BONUS HOMEWORK FOR THE READER______: If a solution similar to "English to Japanese" were to be applied when it comes to an early EOL, it should be possible to raise the amount of characters to 26 in theory by abusing the fact that two chars have "just" 121 table values. But would the increase in complexity be worth it...? It would make "Korean to Japanese" and viceversa harder too on the Japanese side of things.
+
+English to Korean:
+0x41 (0x40) bytes + 0xA bytes for the name. Abuse the extra space. Keep 0x22 bytes reserved for the mail (mail + 0x50 to end it). Add at 0x22 the language bytes, which must match the ones after the trainer name (for this to work perfectly). Technically not needed, but why not. At 0x24, place 0x27 (39) bits (so 5 bytes) that tell whether the message or the trainer name has "bad codes". These include 0x00-0xB (avoid doing bad stuff with mixed bytes text coming from Japanese to English mail. The engine seems to handle it fine, but you never know) and 0x46, 0x47, 0x48 and 0x4D. The extra 0x18 (24) bytes are for... Idk... Another marker that this is an international mail + a checksum?
+
+
+EXTRA:
+
+This "Korean to English" scheme could be applied (with an extra non-immissible byte to mark Korean language) at runtime (for a synchronous trade) to trainer names for regular Pokémon... For "English to Japanese", it is a lost cause since the amount of lost bytes is too high for how little space the Japanese names take...
+
+Proof:
+OT Name/Nickname Korean to EN conversion at runtime (useful to avoid bad characters appearing and/or control codes):
+
+01 -> KOR_BYTE (+4 = 4)
+61 -> 50 (+8 = 12)
+02 -> 21 (-8 + 4 = 8)
+62 -> 61 (-8 + 8 = 8)
+03 -> 62 (-8 + 4 = 4)
+63 -> 63 (-8 + 8 = 4)
+04 -> 43 (-8 + 4 = 0)
+64 -> 64 (-8 + 8 = 0)
+(Parity)
+05 -> 05
+65 -> 65
+
+This only works in one direction, sadly... It cannot be used to go back to KOR synchronously.
+
+Assuming a three bytes leeway it could work, but it would fail in case of a double KOR trade...
+Best solution is to use the mail one and leave it on only for Buffered trades that use it when receiving from KOR or sending to KOR.
+
+IN STREAM:
+01
+61
+02
+62
+03
+63
+04
+64
+05
+65
+
+OUT STREAM 1:
+
+KOR BYTE                             -> WAIT FOR NEXT
+(bit shaved from 61 - 62) | 1        -> 01
+61 (bit stripped)                    -> 61
+3|2                                  -> 02
+62 (bit stripped)                    -> 62
+50                                   -> 03
+63                                   -> 63
+5|4                                  -> 04
+64                                   -> 64
+65                                   -> 05, 65
+
+OUT STREAM 2:
+
+KOR BYTE | (bit shaved from 61 - 62) -> WAIT FOR NEXT
+2|1                                  -> 01
+61 (bit stripped)                    -> 61
+4|3                                  -> 02
+62 (bit stripped)                    -> 62
+50                                   -> 03
+63                                   -> 63
+64                                   -> 04, 64
+0|5                                  -> 05
+65                                   -> 65
+
+Arrangement in OUT STREAM 2 allows saving as much data as possible (2 characters + 2 half-characters) if data is then converted to Japanese. Won't be perfect... But better than default. However, it wouldn't matter since you'd lose the important part of the table... So default to OUT STREAM 1. Both should be usable in synchronous trades when converting back. Not when converting to.
+
+Bad characters: 39 in International, 43 in Korean (+ 11 for tables, = 54). Characters before 0x50 can be used too if needed though, as they cannot be input in English...
+Japan Gen 2 text: 170 possible characters can be input in mail. 159 in mons/ot names.
+International Gen 2 text: 82 shared possible characters can be input in mail + 41 non-shared, total 123. 74 total in mons/ot names. Mail non shared: ITA/SPA: 32, total: 114. GER: 9, total: 91. FRA: 24, total: 106. ENG: 8, total: 90.
+
+JPN name to KOR, needed to protect KOR from JPN names that have control codes in KOR.
+
+IN STREAM:
+01
+02
+03
+04
+05
+
+OUT STREAM:
+JPN BYTE                             -> WAIT FOR NEXT
+bit shaved from 01-05                -> WAIT FOR NEXT
+01 (bit stripped)                    -> 01
+02 (bit stripped)                    -> 02
+03 (bit stripped)                    -> 03
+04 (bit stripped)                    -> 04
+05 (bit stripped)                    -> 05, EOL, EOL

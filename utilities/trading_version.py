@@ -4,8 +4,8 @@ class TradingVersion:
     """
 
     # Changes each protocol change
-    version_major = 4
-    version_minor = 1
+    version_major = 5
+    version_minor = 0
     version_build = 0
 
     # Fixed, does not change
@@ -31,8 +31,12 @@ class TradingVersion:
             return False
         if parsed_data[0] < major:
             return False
+        if parsed_data[0] > major:
+            return True
         if parsed_data[1] < minor:
             return False
+        if parsed_data[1] > minor:
+            return True
         if parsed_data[2] < build:
             return False
         return True
@@ -42,8 +46,12 @@ class TradingVersion:
             return True
         if parsed_data[0] > major:
             return False
+        if parsed_data[0] < major:
+            return True
         if parsed_data[1] > minor:
             return False
+        if parsed_data[1] < minor:
+            return True
         if parsed_data[2] > build:
             return False
         return True

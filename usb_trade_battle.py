@@ -33,7 +33,6 @@ out_id_base = 0
 out_id_gblink2 = 1
 
 path = "pokemon_gen3_to_genx_mb.gba"
-
 def kill_function():
     os.kill(os.getpid(), signal.SIGINT)
 
@@ -265,22 +264,72 @@ def signal_handler(sig, frame):
 
 def libusb_method():
     global dev, epIn, epOut, epCmd, out_id, reattach
-    try:
-        devices = list(usb.core.find(find_all=True,idVendor=VID, idProduct=PID))
-        for d in devices:
-            #print('Device: %s' % d.product)
-            dev = d
-        if dev is None:
-            # Try the GBLink 2.x firmware
-            devices = list(usb.core.find(find_all=True,idVendor=VID_GBLink_2, idProduct=PID_GBLink_2))
-            for d in devices:
-                dev = d
-            if dev is None:
-                return False
+
+    devices = list(usb.core.find(find_all=True,idVendor=VID, idProduct=PID))
+    for d in devices:
+        #print('Device: %s' % d.product)
+        dev = d
+        try:
+            reattach = False
+            if(os.name != "nt"):
+                if dev.is_kernel_driver_active(0):
+                    try:
+                        reattach = True
+                        dev.detach_kernel_driver(0)
+                    except usb.core.USBError as e:
+                        sys.exit("Could not detach kernel driver: %s" % str(e))
+                else:
+                    pass
+                    #print("no kernel driver attached")
+
+            dev.set_configuration()
 
             cfg = dev.get_active_configuration()
 
+            intf = cfg[(2,0)]   # Or find interface with class 0xff
+
+            # Properly handle multiple programs accessing the same device
+            usb.util.claim_interface(dev, intf)
+            
+            dev.reset()
+
+            epIn = usb.util.find_descriptor(
+                intf,
+                custom_match = \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_IN)
+
+            assert epIn is not None
+
+            epOut = usb.util.find_descriptor(
+                intf,
+                custom_match = \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_OUT)
+
+            assert epOut is not None
+
+            dev.ctrl_transfer(bmRequestType = 1, bRequest = 0x22, wIndex = 2, wValue = 0x01)
+            out_id = out_id_base
+            return True
+
+        except:
+            pass
+
+    # Try the GBLink 2.x firmware
+    devices = list(usb.core.find(find_all=True,idVendor=VID_GBLink_2, idProduct=PID_GBLink_2))
+    for d in devices:
+        dev = d
+
+        try:
+            cfg = dev.get_active_configuration()
+
             intf = cfg[(0,0)]   # Vendor interface: EP 0x01 commands, EP 0x02/0x82 data
+
+            # Properly handle multiple programs accessing the same device
+            usb.util.claim_interface(dev, intf)
 
             epCmd = usb.util.find_descriptor(intf, custom_match=lambda e: e.bEndpointAddress == 0x01)
             epOut = usb.util.find_descriptor(intf, custom_match=lambda e: e.bEndpointAddress == 0x02)
@@ -291,49 +340,10 @@ def libusb_method():
             assert epCmd is not None
             out_id = out_id_gblink2
             return True
-        reattach = False
-        if(os.name != "nt"):
-            if dev.is_kernel_driver_active(0):
-                try:
-                    reattach = True
-                    dev.detach_kernel_driver(0)
-                except usb.core.USBError as e:
-                    sys.exit("Could not detach kernel driver: %s" % str(e))
-            else:
-                pass
-                #print("no kernel driver attached")
-        
-        dev.reset()
+        except:
+            pass
 
-        dev.set_configuration()
-
-        cfg = dev.get_active_configuration()
-
-        intf = cfg[(2,0)]   # Or find interface with class 0xff
-
-        epIn = usb.util.find_descriptor(
-            intf,
-            custom_match = \
-            lambda e: \
-                usb.util.endpoint_direction(e.bEndpointAddress) == \
-                usb.util.ENDPOINT_IN)
-
-        assert epIn is not None
-
-        epOut = usb.util.find_descriptor(
-            intf,
-            custom_match = \
-            lambda e: \
-                usb.util.endpoint_direction(e.bEndpointAddress) == \
-                usb.util.ENDPOINT_OUT)
-
-        assert epOut is not None
-
-        dev.ctrl_transfer(bmRequestType = 1, bRequest = 0x22, wIndex = 2, wValue = 0x01)
-    except:
-        return False
-    out_id = out_id_base
-    return True
+    return False
 
 class WinUsbCDCEPCMD:
     def __init__(self, p):

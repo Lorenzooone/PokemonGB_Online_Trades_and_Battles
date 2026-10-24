@@ -1,5 +1,6 @@
 from .gsc_trading import GSCTradingClient, GSCTrading, GSCTradingClientTransfers
 from .gsc_trading_strings import GSCTradingStrings
+from .gsc_trading_data_utils import GSCUtilsMisc
 from .rby_trading_data_utils import RBYUtils, RBYTradingData, RBYChecks
 
 class RBYTradingClientTransfers:
@@ -8,11 +9,13 @@ class RBYTradingClientTransfers:
     full_transfer = "FLL1"
     single_transfer = "SNG1"
     pool_transfer = "POL1"
+    pool_transfer_new = pool_transfer
     moves_transfer = "MVS1"
     choice_transfer = "CHC1"
     accept_transfer = "ACP1"
     success_transfer = "SUC1"
     buffered_transfer = "BUF1"
+    language_transfer = "LNG1"
     negotiation_transfer = "NEG1"
     version_client_transfer = "VEC1"
     version_server_transfer = "VES1"
@@ -27,6 +30,7 @@ class RBYTradingClientTransfers:
         accept_transfer : {1 + 1}, # Counter + Accept
         success_transfer : {1 + 1}, # Counter + Success
         buffered_transfer : {1 + 1}, # Counter + Buffered or not
+        language_transfer : {1}, # Language byte
         negotiation_transfer : {1 + 1}, # Counter + Convergence value
         version_client_transfer : {6}, # Client's version value
         version_server_transfer : {6}, # Server's version value
@@ -48,6 +52,9 @@ class RBYTradingClient(GSCTradingClient):
         
     def get_utils_class(self):
         return RBYUtils
+
+    def generate_chosen_mon_data(self, index):
+        return self.utils_class.single_mon_to_data(self.trader.own_pokemon.pokemon[index], self.trader.own_pokemon.is_mon_egg(index))
     
     def get_move_data_only(self):
         """
@@ -126,7 +133,25 @@ class RBYTrading(GSCTrading):
         return RBYTradingClient(self, connection, menu.verbose, self.stop_trade, self.party_reader)
     
     def get_checks(self, menu):
-        return RBYChecks(self.special_sections_len, menu.do_sanity_checks)
+        return RBYChecks(self.special_sections_len, menu.do_sanity_checks, language=menu.language, set_default_nickname = menu.trade_default_pokemon_names, set_default_ot = menu.trade_default_trainer_names, set_default_partner = menu.trade_default_trainer_names, do_profanity_checks = menu.profanity_filter)
+    
+    def get_checker(self, index, buffered):
+        return self.checks.checks_map[index]
+
+    def get_big_trading_data_recv_lengths(self):
+        return self.special_sections_len
+
+    def process_obtained_big_trading_data(self, data):
+        return data
+    
+    def get_section_length(self, index, buffered):
+        return self.special_sections_len[index]
+
+    def create_sendable_big_trading_data(self):
+        return self.own_pokemon.create_trading_data(self.special_sections_len)
+
+    def get_language_family_suggestion_str(self, language_family_own, language_family_other):
+        return GSCTradingStrings.suggest_trade_language_gen1_str.format(language_one = GSCTradingStrings.get_language_family_to_str(language_family_own), language_two = GSCTradingStrings.get_language_family_to_str(language_family_other))
 
     def trade_starting_sequence(self, buffered, send_data = [None, None, None, None]):
         """
@@ -148,14 +173,17 @@ class RBYTrading(GSCTrading):
         if self.server_version is not None:
             send_data[0] = self.force_receive(self.comms.get_random)
 
-        if self.is_running_compat_3_mode:
-            random_data, random_data_other, just_sent = self.read_section(0, send_data[0], buffered, just_sent, 0)
-        else:
-            random_data, random_data_other, just_sent = self.read_section(0, send_data[0], True, just_sent, 0)
+        random_data, random_data_other, just_sent = self.read_section(0, send_data[0], True, just_sent, 0)
         pokemon_data, pokemon_data_other, just_sent = self.read_section(1, send_data[1], buffered, just_sent, 0)
         patches_data, patches_data_other, just_sent = self.read_section(2, send_data[2], buffered, just_sent, 1)
-        
+
+        #GSCUtilsMisc.print_table_hex(pokemon_data)
+        #GSCUtilsMisc.print_table_hex(pokemon_data_other)
+
         self.utils_class.apply_patches(pokemon_data, patches_data, self.utils_class)
         self.utils_class.apply_patches(pokemon_data_other, patches_data_other, self.utils_class)
+
+        #GSCUtilsMisc.print_table_hex(pokemon_data)
+        #GSCUtilsMisc.print_table_hex(pokemon_data_other)
         
         return [random_data, pokemon_data, None], [random_data_other, pokemon_data_other, None]

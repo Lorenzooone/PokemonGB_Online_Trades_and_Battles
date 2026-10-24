@@ -21,7 +21,7 @@ class GSCBattlingClientTransfers(GSCTradingClientTransfers):
     transfer_sync_transfer = "TST2"
 
     possible_transfers = GSCTradingClientTransfers.possible_transfers
-    possible_transfers[battle_full_transfer] = {1 + 0x40C} # Counter + Sum of special_sections_len
+    possible_transfers[battle_full_transfer] = {1 + 0x40C, 1 + 0x4CC} # Counter + Sum of special_sections_len - Ver 4.0, 5.0
     possible_transfers[reseed_server_transfer] = {1} # ACK from server
     possible_transfers[transfer_sync_transfer] = {1} # ACK to/from other player that it is ready for transfer
 
@@ -186,6 +186,9 @@ class GSCBattling(GSCTrading):
     
     def get_comms(self, connection, menu):
         return GSCBattlingClient(self, connection, menu.verbose, self.stop_battle, self.party_reader)
+
+    def get_checks(self, menu):
+        return GSCChecks(self.special_sections_len, menu.do_sanity_checks, language=menu.language, set_default_nickname = menu.battle_default_pokemon_names, set_default_ot = menu.battle_default_trainer_names, set_default_partner = menu.battle_default_trainer_names, do_profanity_checks = menu.profanity_filter)
 
     def start_lock_swap(self, timeout):
         """
@@ -519,6 +522,9 @@ class GSCBattling(GSCTrading):
         self.force_receive(self.comms.get_reseed_server)
         self.do_version_check()
 
+    def get_language_family_suggestion_str(self, language_family_own, language_family_other):
+        return None
+
     def do_battle(self, get_mon_function, close=False, to_server=False):
         """
         Handles the trading menu.
@@ -674,8 +680,8 @@ class GSCBattling(GSCTrading):
             if valid:
                 if self.can_drop_commands:
                     self.start_lock_swap(self.menu.time_between_battle_turns)
-                self.comms.send_big_battle_trading_data(self.own_pokemon.create_trading_data(self.special_sections_len), self.last_random)
-                other_pokemon_final_full_data = self.force_receive(self.comms.get_big_battle_trading_data, self.special_sections_len)
+                self.comms.send_big_battle_trading_data(self.create_sendable_big_trading_data(), self.last_random)
+                other_pokemon_final_full_data = self.force_receive(self.comms.get_big_battle_trading_data, self.get_big_trading_data_recv_lengths())
                 other_pokemon_final_data = other_pokemon_final_full_data[1]
                 self.utils_class.apply_patches(other_pokemon_final_data, other_pokemon_final_full_data[2], self.utils_class)
                 other_pokemon_final = self.party_reader(other_pokemon_final_data)

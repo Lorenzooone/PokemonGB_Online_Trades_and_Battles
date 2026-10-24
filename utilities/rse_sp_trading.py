@@ -9,6 +9,7 @@ class RSESPTradingClientTransfers:
     # bad debugging
     full_transfer = "FL3S"
     pool_transfer = "P3SI"
+    pool_transfer_new = pool_transfer
     pool_transfer_out = "P3SO"
     choice_transfer = "CH3S"
     version_client_transfer = "VEC3"
@@ -75,9 +76,9 @@ class RSESPTradingClient(GSCTradingClient):
                 if not received_mon[1]:
                     mon.party_info.set_id(0, received_mon[0].get_species())
                     # Handle egg options
-                    if (self.trader.menu.egg) and (self.trader.menu.gen == 2):
+                    if self.trader.menu.egg:
                         received_mon[0].set_hatching_cycles()
-                        received_mon[0].set_egg_nickname()
+                        received_mon[0].set_egg_nickname(self.trader.menu.language)
             else:
                 mon = None
                     
@@ -187,7 +188,7 @@ class RSESPTrading(GSCTrading):
         return RSESPTradingClient(self, connection, menu.verbose, self.stop_trade, self.party_reader)
     
     def get_checks(self, menu):
-        return RSESPChecks(self.special_sections_len, menu.do_sanity_checks)
+        return RSESPChecks(self.special_sections_len, menu.do_sanity_checks, language=menu.language)
     
     def get_bytes_from_pos(self, index):
         base_pos = index & 0xFFF
@@ -588,6 +589,30 @@ class RSESPTrading(GSCTrading):
             received = fun(num)
             self.swap_byte(0)
         return received
+
+    def preprocess_trading_data(self, data):
+        from .text_conversions import PokemonBadWordsFilter
+        if data is None:
+            return data
+        other_mon_processing = self.party_reader(data)
+
+        # Handle trade partner info
+        if self.menu.trade_default_trainer_names or (self.menu.profanity_filter and PokemonBadWordsFilter.is_bad_word(other_mon_processing.get_partner_name_general(None))):
+            other_mon_processing.set_default_partner_name()
+
+        for i in range(other_mon_processing.get_party_size()):
+            # Per-party pokemon stuff...
+
+            # Handle nickname and OT
+            if other_mon_processing.pokemon[i].get_is_egg():
+                other_mon_processing.pokemon[i].set_egg_nickname()
+            else:
+                if self.menu.trade_default_pokemon_names or (self.menu.profanity_filter and PokemonBadWordsFilter.is_bad_word(other_mon_processing.pokemon[i].get_nickname_general(None))):
+                    other_mon_processing.pokemon[i].set_default_nickname()
+                if self.menu.trade_default_trainer_names or (self.menu.profanity_filter and PokemonBadWordsFilter.is_bad_word(other_mon_processing.pokemon[i].get_ot_name_general(None))):
+                    other_mon_processing.pokemon[i].set_default_trainer_name()
+
+        return other_mon_processing.create_trading_data(self.special_sections_len)[0]
         
     def trade_starting_sequence(self, buffered, send_data = [None, None, None, None]):
         """
@@ -597,13 +622,12 @@ class RSESPTrading(GSCTrading):
         # Prepare checks
         self.checks.reset_species_item_list()
         # Send and get the first two sections
-        data, data_other = self.read_section(send_data[0])
+        data, data_other = self.read_section(self.preprocess_trading_data(send_data[0]))
         self.own_pokemon = self.party_reader(data)
         self.comms.send_big_trading_data(self.own_pokemon.create_trading_data(self.special_sections_len))
         if send_data[0] is None:
-            data_other = self.own_pokemon.create_trading_data(self.special_sections_len)
             data_other = self.force_receive(self.comms.get_big_trading_data)
-            data, data_other = self.read_section(data_other)
+            data, data_other = self.read_section(self.preprocess_trading_data(data_other))
 
         self.own_pokemon = self.party_reader(data)
         self.other_pokemon = self.party_reader(data_other)
@@ -622,6 +646,7 @@ class RSESPTrading(GSCTrading):
         """
         self.trade_type = GSCTradingStrings.two_player_trade_str
         self.reset_trade()
+        self.menu.buffered = True
         self.comms.send_client_version()
         self.exit_or_new = True
         valid = True
@@ -639,6 +664,7 @@ class RSESPTrading(GSCTrading):
         """
         self.trade_type = GSCTradingStrings.pool_trade_str
         self.reset_trade()
+        self.menu.buffered = True
         self.comms.send_client_version()
         self.max_level = self.menu.max_level
         while True:

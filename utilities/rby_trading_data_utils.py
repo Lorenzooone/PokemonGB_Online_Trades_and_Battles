@@ -54,10 +54,51 @@ class RBYUtils(GSCUtils):
     def get_evolution_item(species):
         return None
     
-    def get_patch_set_num_index(is_mail, is_japanese):
+    def get_patch_set_num_index(is_mail, is_japanese, is_old_mail_data):
         patch_sets_num = 2
         patch_sets_index = 0
         return patch_sets_num, patch_sets_index
+
+    def single_mon_from_data_multilanguage(checks, data):
+        from .text_conversions import PokemonNamesForGen
+        language_valid_list = []
+        language_match_list = []
+        language_ret_data_dict = dict()
+        gen = 1
+
+        for language in PokemonNamesForGen.all_languages_list:
+            non_checked = RBYTradingPokémonInfo.set_data(data)
+            non_checked.apply_all_text_transforms_to_all(language)
+
+            checks.language = language
+            ret_data = RBYUtils.single_mon_from_data(checks, data)
+
+            if ret_data is None:
+                continue
+            
+            language_ret_data_dict[language] = ret_data
+
+            if ret_data[0].nickname.get_length() > PokemonNamesForGen.get_pokemon_max_nickname_length(gen, language):
+                continue
+
+            if ret_data[0].ot_name.get_length() > PokemonNamesForGen.get_trainer_max_name_length(gen, language):
+                continue
+
+            if ret_data[0].is_text_equal(non_checked, do_mail = False):
+                language_match_list += [language]
+
+        if len(language_ret_data_dict.keys()) <= 0:
+            return None
+
+        language_ref_list = language_match_list
+        if len(language_match_list) <= 0:
+            language_ref_list = list(language_ret_data_dict.keys())
+        mon_data_out = language_ret_data_dict[language_ref_list[0]]
+
+        #print(mon_data_out[0].get_data())
+        #print(non_checked.get_data())
+        #print(language_ref_list)
+        return mon_data_out + [GSCUtils.convert_language_list_to_int(language_ref_list, mon_data_out, gen)]
     
     def single_mon_from_data(checks, data):
         ret = None
@@ -65,7 +106,7 @@ class RBYUtils(GSCUtils):
         # Prepare sanity checks stuff
         checks.reset_species_item_list()
         checks.set_single_team_size()
-        checks.prepare_text_buffer()
+        checks.reset_text_buffers()
         checks.prepare_patch_sets_buffer()
         checks.prepare_species_buffer()
         checker = checks.single_pokemon_checks_map
@@ -90,6 +131,9 @@ class RBYUtils(GSCUtils):
     
     def single_mon_to_data(mon, is_egg):
         return mon.get_data()
+
+    def get_basic_checks():
+        return RBYChecks([0,0,0], True, use_strict_language_checks = True)
 
 class RBYTradingText(GSCTradingText):
     """
@@ -122,6 +166,7 @@ class RBYTradingPokémonInfo(GSCTradingPokémonInfo):
     evs_pos = 0x11
     ivs_pos = 0x1B
     status_pos = 4
+    reference_gen = 1
     
     no_moves_equality_ranges = [range(0,3), range(4,8), range(0xC,0x1D), range(0x21, pokemon_data_len)]
     full_equality_ranges = [range(0, pokemon_data_len)]
@@ -138,6 +183,9 @@ class RBYTradingPokémonInfo(GSCTradingPokémonInfo):
 
     def add_nickname(self, data, start):
         self.nickname = RBYTradingText(data, start, length=self.nickname_len)
+    
+    def set_friendship(self, val=None):
+        pass
     
     def set_hatching_cycles(self, val=1):
         pass
@@ -263,9 +311,10 @@ class RBYChecks(GSCChecks):
     rattata_id = 0xA5
     max_evs = 0xFFFF
     max_ivs = 0xF
+    reference_gen = 1
     
-    def __init__(self, section_sizes, do_sanity_checks):
-        super(RBYChecks, self).__init__(section_sizes, do_sanity_checks)
+    def __init__(self, section_sizes, do_sanity_checks, language = None, set_default_nickname = False, set_default_ot = False, set_default_partner = False, do_profanity_checks = False, use_strict_language_checks = False):
+        super(RBYChecks, self).__init__(section_sizes, do_sanity_checks, language=language, set_default_nickname=set_default_nickname, set_default_ot=set_default_ot, set_default_partner=set_default_partner, do_profanity_checks=do_profanity_checks, use_strict_language_checks=use_strict_language_checks)
     
     def get_utils_class(self):
         return RBYUtils
@@ -282,19 +331,11 @@ class RBYChecks(GSCChecks):
         self.level = self.utils_class.max_level
         return val
     
-    def is_egg(self):
+    def is_egg(self, index):
         return False
-    
-    @GSCChecks.clean_check_sanity_checks
-    def clean_species_sp(self, species):
-        if species == self.free_value_species or self.species_list_size >= self.team_size:
-            self.add_to_species_list(self.free_value_species)
-            self.curr_species_pos += 1
-            return self.free_value_species
-        found_species = self.clean_value(species, self.is_species_valid, self.rattata_id)
-        self.add_to_species_list(found_species)
-        self.curr_species_pos += 1
-        return found_species
+
+    def get_species_is_egg(self, species):
+        return False
     
     @GSCChecks.clean_check_sanity_checks
     def clean_item(self, item):

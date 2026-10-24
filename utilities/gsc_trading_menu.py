@@ -3,6 +3,7 @@ from random import Random
 from .trading_version import TradingVersion
 from .gsc_trading_strings import GSCTradingStrings
 from argparse import ArgumentParser
+from .text_conversions import PokemonNamesForGen
 
 class GSCTradingMenu:
     """
@@ -29,6 +30,18 @@ class GSCTradingMenu:
         if is_emulator:
             self.emulator = [args.emulator_host, args.emulator_port]
             self.fast_emu_conn = args.fast_emu_conn
+        self._japanese_language_index = PokemonNamesForGen.JAPANESE_LANGUAGE
+        self._english_language_index = PokemonNamesForGen.ENGLISH_LANGUAGE
+        if self.japanese:
+            self.language = self._japanese_language_index
+        else:
+            self.language = self.convert_language_str(args.language)
+        self.japanese = self.language == self._japanese_language_index
+        self.profanity_filter = args.profanity_filter
+        self.trade_default_pokemon_names = args.trade_default_pokemon_names
+        self.trade_default_trainer_names = args.trade_default_trainer_names
+        self.battle_default_pokemon_names = args.battle_default_pokemon_names
+        self.battle_default_trainer_names = args.battle_default_trainer_names
         self.do_sanity_checks = args.do_sanity_checks
         self.kill_on_byte_drops = args.kill_on_byte_drops
         self.verbose = args.verbose
@@ -57,18 +70,24 @@ class GSCTradingMenu:
             "1": self.handle_server_option,
             "2": self.handle_port_option,
             "3": self.handle_japanese_option,
-            "4": self.handle_sanity_option,
-            "5": self.handle_verbose_option,
-            "6": self.handle_buffered_option,
-            "7": self.handle_kill_on_byte_drop_option,
-            "8": self.handle_max_level_option,
-            "9": self.handle_eggs_option,
-            "btt": self.handle_battle_turn_time_option
+            "4": self.handle_language_option,
+            "5": self.handle_sanity_option,
+            "6": self.handle_verbose_option,
+            "7": self.handle_buffered_option,
+            "8": self.handle_kill_on_byte_drop_option,
+            "9": self.handle_max_level_option,
+            "10": self.handle_eggs_option,
+            "btt": self.handle_battle_turn_time_option,
+            "tdpn": self.handle_trade_default_pokemon_names,
+            "bdpn": self.handle_battle_default_pokemon_names,
+            "tdtn": self.handle_trade_default_trainer_names,
+            "bdtn": self.handle_battle_default_trainer_names,
+            "pf": self.handle_profanity_filter,
             }
         if is_emulator:
-            self.options_menu_handlers["10"] = self.handle_emulator_host_option
-            self.options_menu_handlers["11"] = self.handle_emulator_port_option
-            self.options_menu_handlers["12"] = self.handle_fast_emu_conn_option
+            self.options_menu_handlers["11"] = self.handle_emulator_host_option
+            self.options_menu_handlers["12"] = self.handle_emulator_port_option
+            self.options_menu_handlers["13"] = self.handle_fast_emu_conn_option
 
     def get_int(self, default_value):
         x = input()
@@ -85,6 +104,25 @@ class GSCTradingMenu:
         except ValueError:
             ret_val = default_value
         return ret_val
+
+    def convert_language_str(self, str_to_conv, default_to_english = True):
+        possible_strings = PokemonNamesForGen.LANGUAGE_STRINGS_LIST
+
+        str_upper = str_to_conv.upper()
+        list_with_item = None
+
+        for sublist in possible_strings:
+            upper_sublist = [x.upper() for x in sublist]
+            if str_upper in upper_sublist:
+                list_with_item = upper_sublist
+                break
+
+        if list_with_item is None:
+            if default_to_english:
+                return PokemonNamesForGen.ENGLISH_LANGUAGE
+            return None
+
+        return PokemonNamesForGen.sorted_languages_list[list_with_item.index(str_upper)]
     
     def handle_buffered_change_offer(self, buffered, is_battle):
         decided = False
@@ -240,6 +278,24 @@ class GSCTradingMenu:
     
     def handle_japanese_option(self):
         self.japanese = not self.japanese
+        if self.japanese:
+            self.language = self._japanese_language_index
+        else:
+            self.language = self._english_language_index
+        return False
+    
+    def handle_language_option(self):
+        out_language = None
+        while out_language is None:
+            GSCTradingStrings.change_language_ask_print()
+            obtained_language = input()
+            if obtained_language is not None:
+                out_language = self.convert_language_str(obtained_language, default_to_english = False)
+        self.language = out_language
+        if self.language == self._japanese_language_index:
+            self.japanese = True
+        else:
+            self.japanese = False
         return False
     
     def handle_sanity_option(self):
@@ -248,6 +304,26 @@ class GSCTradingMenu:
     
     def handle_kill_on_byte_drop_option(self):
         self.kill_on_byte_drops = not self.kill_on_byte_drops
+        return False
+
+    def handle_trade_default_pokemon_names(self):
+        self.trade_default_pokemon_names = not self.trade_default_pokemon_names
+        return False
+
+    def handle_battle_default_pokemon_names(self):
+        self.battle_default_pokemon_names = not self.battle_default_pokemon_names
+        return False
+
+    def handle_trade_default_trainer_names(self):
+        self.trade_default_trainer_names = not self.trade_default_trainer_names
+        return False
+
+    def handle_battle_default_trainer_names(self):
+        self.battle_default_trainer_names = not self.battle_default_trainer_names
+        return False
+
+    def handle_profanity_filter(self):
+        self.profanity_filter = not self.profanity_filter
         return False
     
     def handle_verbose_option(self):
@@ -272,6 +348,9 @@ class GSCTradingMenu:
         parser.add_argument("-j", "--japanese",
                             action="store_true", dest="japanese", default=False,
                             help="use it if your game is Japanese")
+        parser.add_argument("-l", "--language",
+                            dest="language", default="English",
+                            help="Sets the game language (Possible values: Japanese, [English], French, Italian, German, Korean, Spanish)")
         parser.add_argument("-dsc", "--disable_sanity_checks",
                             action="store_false", dest="do_sanity_checks", default=True,
                             help="don't perform sanity checks for data sent to the device")
@@ -281,8 +360,18 @@ class GSCTradingMenu:
         parser.add_argument("-dkb", "--disable_kill_drops",
                             action="store_false", dest="kill_on_byte_drops", default=True,
                             help="don't kill the process for dropped bytes")
+        parser.add_argument("-dpf", "--disable_profanity_filter", action="store_false", dest="profanity_filter", default = True,
+                            help="Disables the profanity filter")
         parser.add_argument("-mlp", "--max_level_pool", dest="max_level", default = self.default_max_level,
                             help="Pool's max level", type=int)
+        parser.add_argument("-tdpn", "--trade_default_pokemon_names", action="store_true", dest="trade_default_pokemon_names", default = False,
+                            help="Sets the nickname of traded Pokémon to the default one")
+        parser.add_argument("-tdtn", "--trade_default_trainer_names", action="store_true", dest="trade_default_trainer_names", default = False,
+                            help="Sets the OT name of traded Pokémon to a default one")
+        parser.add_argument("-bdpn", "--battle_allow_pokemon_nicknames", action="store_false", dest="battle_default_pokemon_names", default = True,
+                            help="Allows seeing the nickname of Pokémon in battle")
+        parser.add_argument("-bdtn", "--battle_default_trainer_names", action="store_true", dest="battle_default_trainer_names", default = False,
+                            help="Sets the name of the opponent to a default one")
         parser.add_argument("-egp", "--eggify_pool",
                             action="store_true", dest="egg", default=False,
                             help="turns Pool Pokémon into ready-to-hatch eggs")
@@ -298,9 +387,9 @@ class GSCTradingMenu:
                                 help="emulator's local host")
             parser.add_argument("-ep", "--emulator_port", dest="emulator_port", default = self.default_emulator[1],
                                 help="emulator's local port", type=int)
-            parser.add_argument("-efc", "--emu_fast_conn", action="store_true",
-                                dest="fast_emu_conn", default=False,
-                                help="enables fast emulator connection")
+            parser.add_argument("-esc", "--emu_slow_conn", action="store_false",
+                                dest="fast_emu_conn", default=True,
+                                help="disables fast emulator connection")
         return parser.parse_args()
 
 class GSCBufferedNegotiator(threading.Thread):
@@ -358,4 +447,5 @@ class GSCBufferedNegotiator(threading.Thread):
         self.final_buffered = self.choose_if_buffered()
         if self.menu.verbose:
             GSCTradingStrings.chosen_buffered_print(self.final_buffered, self.is_battle)
+        self.menu.buffered = self.final_buffered
         self.post_func()

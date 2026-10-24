@@ -9,6 +9,7 @@ import os
 import sys
 import boto3
 import botocore
+from pathlib import Path
 from random import Random
 from time import sleep
 import http
@@ -23,6 +24,10 @@ from utilities.gsc_trading_strings import GSCTradingStrings
 from utilities.gsc_trading_data_utils import *
 from utilities.rby_trading_data_utils import *
 from utilities.rse_sp_trading_data_utils import *
+from utilities.text_conversions import PokemonNamesForGen, PokemonBadWordsFilter
+
+server_is_debug = False
+server_do_local_download_if_failure = False
 
 s3 = boto3.client("s3")
 uploader = None
@@ -33,8 +38,8 @@ upload_after = 24
 random_timeout_seconds = 2 * 60
 
 magic_number_pool_data = 0x35678292
-version_pool_data = 0x00000001
-allowed_versions_pool_data = set([0x00000001, version_pool_data])
+version_pool_data = 0x00000002
+allowed_versions_pool_data = set([0x00000001, 0x00000002, version_pool_data])
 
 server_wait_between_checks_seconds = 120
 trade_timeout_timer_seconds = 1 * 60 * 60
@@ -83,9 +88,9 @@ def convert_mons_to_file_data(gen):
     for m in mons[gen]:
         to_add = []
         if gen == 1:
-            to_add = GSCUtils.single_mon_to_data(m[0], m[1])
+            to_add = GSCUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(m[2])
         elif gen == 0:
-            to_add = RBYUtils.single_mon_to_data(m[0], m[1])
+            to_add = RBYUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(m[2])
         elif gen == 2:
             to_add = RSESPUtils.single_mon_to_data(m[0], m[1])
         if first_run:
@@ -94,6 +99,33 @@ def convert_mons_to_file_data(gen):
         data += to_add
         first_run = False
     return data
+
+def is_bad_word(general_str, verbose = True):
+    ret_val = PokemonBadWordsFilter.is_bad_word(general_str)
+    if verbose and ret_val:
+        print("BAD WORD DETECTED: " + general_str)
+    return ret_val
+
+def handle_bad_names_mon(mon):
+    if mon is None:
+        return
+
+    if len(mon) >= 3:
+        language_list = GSCUtils.convert_language_int_to_list(mon[2])
+        language = language_list[0]
+        if PokemonNamesForGen.ENGLISH_LANGUAGE in language_list:
+            language = PokemonNamesForGen.ENGLISH_LANGUAGE
+    else:
+        language = mon[0].get_language()
+
+    if is_bad_word(mon[0].get_nickname_general(language)):
+        mon[0].set_default_nickname(language)
+        
+    if is_bad_word(mon[0].get_ot_name_general(language)):
+        mon[0].set_default_trainer_name(language)
+
+    if mon[1]:
+        mon[0].set_egg_nickname(language)
 
 def convert_file_data_to_mons(data, gen, checks):
     if gen < 0:
@@ -107,8 +139,9 @@ def convert_file_data_to_mons(data, gen, checks):
     is_new_file = False
     data_start_pos = 0
     entries = None
+    curr_version = GSCUtilsMisc.read_int_le(data, 4)
 
-    if (GSCUtilsMisc.read_int_le(data, 0) == magic_number_pool_data) and (GSCUtilsMisc.read_int_le(data, 4) in allowed_versions_pool_data):
+    if (GSCUtilsMisc.read_int_le(data, 0) == magic_number_pool_data) and (curr_version in allowed_versions_pool_data):
         is_new_file = True
         file_gen = GSCUtilsMisc.read_int_le(data, 8)
         if gen != file_gen:
@@ -122,6 +155,7 @@ def convert_file_data_to_mons(data, gen, checks):
     if not is_new_file:
         single_entry_len = len(checks.single_pokemon_checks_map)
         if gen == 1:
+            single_entry_len = len(checks.single_pokemon_checks_map_old)
             single_entry_len += 1
 
     file_entries = int((len(data) - data_start_pos)/single_entry_len)
@@ -132,19 +166,23 @@ def convert_file_data_to_mons(data, gen, checks):
         mon = None
         start_pos = data_start_pos + (i * single_entry_len)
         end_pos = start_pos + single_entry_len
+        language = None
         if gen == 1:
-            mon = GSCUtils.single_mon_from_data(checks, data[start_pos:end_pos])
+            mon = GSCUtils.single_mon_from_data_multilanguage(checks, data[start_pos:end_pos])
         elif gen == 2:
             mon = RSESPUtils.single_mon_from_data(checks, data[start_pos:end_pos])
         elif gen == 0:
-            mon = RBYUtils.single_mon_from_data(checks, data[start_pos:end_pos])
+            mon = RBYUtils.single_mon_from_data_multilanguage(checks, data[start_pos:end_pos])
+
+        handle_bad_names_mon(mon)
+
         if mon is not None:
             preparing_mons += [mon]
     return preparing_mons
 
 class ServerUtils:
     saved_mons_path = "pool_mons"
-    default_path = "pool_default_data/"
+    default_local_download_path = "pool_default_data/"
     bin_eop = ".bin"
     
     def save_mons(gen):
@@ -164,15 +202,27 @@ class ServerUtils:
         Loads the Pool's Pokémon from file.
         """
         raw_data = None
+        success = False
+        do_local = server_do_local_download_if_failure
         try:
             s3.download_file(Bucket="pokemon-gb-online-pool-gen1", Key=ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop, Filename="./" + ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
             raw_data = GSCUtilsMisc.read_data(ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
             print("Downloaded gen " + str(gen + 1))
+            success = True
         except botocore.exceptions.NoCredentialsError:
-            raw_data = GSCUtilsMisc.read_data(ServerUtils.default_path + ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
+            do_local = True
         except Exception as e:
             print('Download error: ', str(e))
+
+        if (not success) and do_local:
+            try:
+                raw_data = GSCUtilsMisc.read_data(ServerUtils.default_local_download_path + ServerUtils.saved_mons_path + str(gen + 1) + ServerUtils.bin_eop)
+            except Exception as e:
+                print('Local read error: ', str(e))
+
         preparing_mons = convert_file_data_to_mons(raw_data, gen, checks)
+        if server_is_debug:
+            print(len(preparing_mons))
         if len(preparing_mons) > 0:
             in_use_mons[gen] = set()
             mons[gen] = preparing_mons
@@ -182,15 +232,24 @@ class ServerUtils:
         If the index is None, it randomly selects a free one.
         Returns the pokémon in that slot.
         """
+        tries = 0
         while index is None:
             if len(in_use_mons[gen]) == len(mons[gen]):
                 return None, None
             rnd = Random()
             rnd.seed()
+
             new_index = rnd.randint(0,len(mons[gen])-1)
+            if server_is_debug:
+                new_index = tries % len(mons[gen]) # FOR DEBUGGING PURPOSES!
+
             if new_index not in in_use_mons[gen]:
                 in_use_mons[gen].add(new_index)
                 index = new_index
+            tries += 1
+            # Just give up at this point, even if a hole should exist...
+            if (tries == 10000):
+                return None, None
         return index, mons[gen][index]
 
 class DataUploader(threading.Thread):
@@ -211,6 +270,8 @@ class DataUploader(threading.Thread):
                     print("Uploaded gen " + str(gen + 1))
                 except botocore.exceptions.NoCredentialsError:
                     pass
+                except Exception as e:
+                    print('Upload error: ', str(e))
 
 class ServerSpecificTransfers:
     random_data_len = 10
@@ -272,7 +333,7 @@ class PoolTradeServer:
             checks_class = RSESPChecks
             self.trading_client_class = RSESPTradingClient
             self.utils_class = RSESPUtils
-        self.checks = checks_class([0,0,0], True)
+        self.checks = checks_class([0,0,0], True, use_strict_language_checks = True)
         rnd = Random()
         rnd.seed()
         self.gen = gen
@@ -294,6 +355,7 @@ class PoolTradeServer:
                 self.trading_client_class.transfers_class.success_transfer: self.handle_get_success,
                 self.trading_client_class.transfers_class.version_client_transfer: self.handle_get_client_version,
                 self.trading_client_class.transfers_class.version_server_transfer: self.handle_get_server_version,
+                self.trading_client_class.transfers_class.language_transfer : self.handle_get_client_language,
                 self.trading_client_class.transfers_class.random_data_transfer: self.handle_get_random_data
             }
             self.send_handlers = {
@@ -301,6 +363,8 @@ class PoolTradeServer:
                 self.trading_client_class.transfers_class.accept_transfer: self.handle_recv_accepted,
                 self.trading_client_class.transfers_class.success_transfer: self.handle_recv_success
             }
+            if self.trading_client_class.transfers_class.pool_transfer != self.trading_client_class.transfers_class.pool_transfer_new:
+                self.get_handlers[self.trading_client_class.transfers_class.pool_transfer_new] = self.handle_new_get_pool
         else:
             self.reset_gen3_accepted()
             self.reset_gen3_success()
@@ -357,8 +421,11 @@ class PoolTradeServer:
                 
         if to_send is not None:
             await connection.send(to_send)
+
+    def handle_new_get_pool(self):
+        return self.handle_get_pool(for_new = True)
     
-    def handle_get_pool(self):
+    def handle_get_pool(self, for_new = False):
         """
         Gets the pokémon from the pool and sends it to the client.
         """
@@ -374,16 +441,26 @@ class PoolTradeServer:
             self.mon_index = None
             self.clear_pool = False
         self.mon_index, self.mon = ServerUtils.get_mon_index(self.mon_index, self.gen)
+        out_transfer_tag = self.trading_client_class.transfers_class.pool_transfer
+        if for_new:
+            out_transfer_tag = self.trading_client_class.transfers_class.pool_transfer_new
         if self.mon_index is None:
-            return self.hll.prepare_send_data(self.trading_client_class.transfers_class.pool_transfer, [self.own_id] + [self.trading_client_class.pool_fail_value])
+            return self.hll.prepare_send_data(out_transfer_tag, [self.own_id] + [self.trading_client_class.pool_fail_value])
         else:
-            return self.hll.prepare_send_data(self.trading_client_class.transfers_class.pool_transfer, [self.own_id] + self.utils_class.single_mon_to_data(self.mon[0], self.mon[1]))
+            if self.gen == 1:
+                mon_data_to_add = self.utils_class.single_mon_to_data(self.mon[0], self.mon[1], use_new_mail_data = for_new)
+            else:
+                mon_data_to_add = self.utils_class.single_mon_to_data(self.mon[0], self.mon[1])
+            return self.hll.prepare_send_data(out_transfer_tag, [self.own_id] + mon_data_to_add)
     
     def handle_get_client_version(self):
         return ServerSpecificTransfers.handle_get_version(self.hll, self.trading_client_class.transfers_class.version_client_transfer)
     
     def handle_get_server_version(self):
         return ServerSpecificTransfers.handle_get_version(self.hll, self.trading_client_class.transfers_class.version_server_transfer)
+
+    def handle_get_client_language(self):
+        return self.hll.prepare_send_data(self.trading_client_class.transfers_class.language_transfer, [0xFF])
     
     def handle_get_random_data(self):
         """
@@ -428,6 +505,7 @@ class PoolTradeServer:
                 self.clear_pool = True
                 if not self.mon_index in in_use_mons[self.gen]:
                     in_use_mons[self.gen].add(self.mon_index)
+                handle_bad_names_mon(self.received_mon[1])
                 mons[self.gen][self.mon_index] = self.received_mon[1]
                 ServerUtils.save_mons(self.gen)
                 try:
@@ -547,6 +625,7 @@ class PoolTradeServer:
                     self.clear_pool = True
                     if not self.mon_index in in_use_mons[self.gen]:
                         in_use_mons[self.gen].add(self.mon_index)
+                    handle_bad_names_mon(self.received_mon[1])
                     mons[self.gen][self.mon_index] = self.received_mon[1]
                     ServerUtils.save_mons(self.gen)
                     try:
@@ -589,7 +668,9 @@ class PoolTradeServer:
         """
         if self.mon_index is not None:
             id = data[0]
-            mon = self.utils_class.single_mon_from_data(self.checks, data[2:])
+
+            mon = self.utils_class.single_mon_from_data_multilanguage(self.checks, data[2:])
+
             self.received_accepted = None
             self.received_success = None
             self.received_mon = [id, mon]
@@ -613,14 +694,17 @@ class PoolTradeServer:
         Gets the pokémon the client wants to put into the Pool.
         """
         if self.mon_index is not None:
-            id = data[0]
-            if len(data) > 1:
-                mon = self.utils_class.single_mon_from_data(self.checks, data[1:])
-            else:
-                mon = None
-            self.reset_gen3_accepted()
-            self.reset_gen3_success()
-            self.received_mon = [id, mon]
+            try:
+                id = data[0]
+                if len(data) > 1:
+                    mon = self.utils_class.single_mon_from_data(self.checks, data[1:])
+                else:
+                    mon = None
+                self.reset_gen3_accepted()
+                self.reset_gen3_success()
+                self.received_mon = [id, mon]
+            except:
+                self.received_mon = None
         return None
     
     def handle_recv_accepted3_0(self, data):
@@ -815,7 +899,7 @@ class WebsocketServer (threading.Thread):
             self.port = int(os.environ["PORT"])
         except KeyError as e:
             self.port = port
-        self.checks = [RBYChecks([0,0,0], True), GSCChecks([0,0,0], True), RSESPChecks([0,0,0], True)]
+        self.checks = [RBYChecks([0,0,0], True, use_strict_language_checks = True), GSCChecks([0,0,0], True, use_strict_language_checks = True), RSESPChecks([0,0,0], True, use_strict_language_checks = True)]
         ServerUtils.load_mons(self.checks[0], 0)
         ServerUtils.load_mons(self.checks[1], 1)
         ServerUtils.load_mons(self.checks[2], 2)
@@ -830,7 +914,7 @@ class WebsocketServer (threading.Thread):
         room = 100000
         if len(path) >= 12:
             gen = WebsocketServer.get_gen(path)
-            room = int(path[7:12])
+            room = WebsocketServer.get_room(path)
             if link_proxy is None:
                 link_proxy = ProxyLinkServer(gen, websocket)
             if link_proxy.other_ws is None:
@@ -862,7 +946,7 @@ class WebsocketServer (threading.Thread):
         room = 100000
         if len(path) >= 12:
             gen = WebsocketServer.get_gen(path)
-            room = int(path[7:12])
+            room = WebsocketServer.get_room(path)
             if link_proxy is None:
                 link_proxy = ProxyBattleLinkServer(gen, room, websocket)
             if link_proxy.other_ws is None:
@@ -898,12 +982,26 @@ class WebsocketServer (threading.Thread):
         return pool_trader
     
     def get_gen(path):
-        gen = int(path[5]) - 1
+        try:
+            gen = int(path[5]) - 1
+        except:
+            gen = 0
         if gen >= total_gens:
             gen = 1
         if gen < 0:
             gen = 0
         return gen
+    
+    def get_room(path):
+        try:
+            room = int(path[7:12])
+        except:
+            room = 0
+        if room >= total_rooms:
+            room = total_rooms - 1
+        if room < 0:
+            room = 0
+        return room
         
     async def cleaner(identifier, processer, path):
         gen = WebsocketServer.get_gen(path)
@@ -971,15 +1069,20 @@ class WebsocketServer (threading.Thread):
                 await WebsocketServer.cleaner(curr_room, processer, path)
                 break
 
-            if path.startswith(WebsocketServer.trade_link_str):
-                curr_room, processer = await WebsocketServer.link_function(websocket, data, path, processer)
-                time_disconnect = trade_timeout_timer_seconds
-            if path.startswith(WebsocketServer.battle_link_str):
-                curr_room, processer = await WebsocketServer.battle_function(websocket, data, path, processer)
-                time_disconnect = battle_timeout_timer_seconds
-            if path.startswith(WebsocketServer.pool_trade_link_str):
-                processer = await WebsocketServer.pool_function(websocket, data, path, processer)
-                time_disconnect = pool_trade_timeout_timer_seconds
+            try:
+                if path.startswith(WebsocketServer.trade_link_str):
+                    curr_room, processer = await WebsocketServer.link_function(websocket, data, path, processer)
+                    time_disconnect = trade_timeout_timer_seconds
+                if path.startswith(WebsocketServer.battle_link_str):
+                    curr_room, processer = await WebsocketServer.battle_function(websocket, data, path, processer)
+                    time_disconnect = battle_timeout_timer_seconds
+                if path.startswith(WebsocketServer.pool_trade_link_str):
+                    processer = await WebsocketServer.pool_function(websocket, data, path, processer)
+                    time_disconnect = pool_trade_timeout_timer_seconds
+            except Exception as e:
+                print('Processing error:', str(e))
+                await WebsocketServer.cleaner(curr_room, processer, path)
+                break
 
         remove_ws_connection()
 
@@ -1052,6 +1155,8 @@ def signal_handler(sig, frame):
     exit_gracefully()
 
 if __name__ == "__main__":
+    if server_is_debug:
+        print("DEBUG MODE!\nNOT FOR RELEASE!")
     init_base_data()
     currently_open_connections = 0
     GSCUtils()
@@ -1061,6 +1166,8 @@ if __name__ == "__main__":
     ws.start()
 
     signal.signal(signal.SIGINT, signal_handler)
+
+    print("Ready to serve!")
 
     while True:
         sleep(1)

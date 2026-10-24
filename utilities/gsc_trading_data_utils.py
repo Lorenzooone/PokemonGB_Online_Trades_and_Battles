@@ -1,6 +1,9 @@
 import math
 import sys
+import types
 from .gsc_trading_strings import GSCTradingStrings
+
+debug_print_if_file_is_missing = False
 
 class GSCUtilsLoaders:
     """
@@ -52,21 +55,6 @@ class GSCUtilsLoaders:
             dict[species] = entry
         return dict
 
-    def text_to_bytes(target, text_conv_target):
-        names = GSCUtilsLoaders.read_text_file(target)
-        text_conv_dict = GSCUtilsLoaders.prepare_dict(text_conv_target)
-        text_conv_dict['\n'] = GSCUtils.end_of_line
-        byte_names = []
-        for i in range(0x100):
-            byte_names += [[GSCUtils.end_of_line]*GSCUtils.name_size]
-            for j in range(len(names[i])):
-                letter = names[i][j].upper()
-                if letter in text_conv_dict:
-                    byte_names[i][j] = text_conv_dict[letter]
-                else:
-                    print(GSCTradingStrings.unrecognized_character_str.format(letter=letter))
-        return byte_names
-
     def prepare_check_list(data):
         ret = [False] * 0x100
         if data is not None:
@@ -106,6 +94,19 @@ class GSCUtilsLoaders:
             pass
         return data
 
+    def load_replacement_data_double_dict(data, data_len = 1):
+        out_forward = dict()
+        out_backwards = dict()
+        
+        entry_len = data_len * 2
+        for i in range(len(data) // entry_len):
+            entry_pos = i * entry_len
+            elem_one = GSCUtilsMisc.from_n_bytes_le(data, data_len, entry_pos)
+            elem_two = GSCUtilsMisc.from_n_bytes_le(data, data_len, entry_pos + data_len)
+            out_forward[elem_one] = elem_two
+            out_backwards[elem_two] = elem_one
+        return out_forward, out_backwards
+
 class GSCUtils:
     """
     Class which contains generic methods and data used for
@@ -115,15 +116,15 @@ class GSCUtils:
     evolution_ids_path = "evolution_ids.bin"
     mail_ids_path = "ids_mail.bin"
     no_mail_path = "no_mail_section.bin"
+    no_mail_old_path = "no_mail_section_old.bin"
     base_random_path = "base_random_section.bin"
     base_stats_path = "stats.bin"
-    text_conv_path = "text_conv.txt"
-    pokemon_names_path = "pokemon_names.txt"
     moves_pp_list_path = "moves_pp_list.bin"
     learnset_evos_path = "learnset_evos.bin"
     exp_groups_path = "pokemon_exp_groups.bin"
     exp_lists_path = "pokemon_exp.txt"
-    egg_nick_path = "egg_nick.bin"
+    bad_ids_and_replacement_text_special_kor_path = "bad_ids_and_replacement_text_special_kor.bin"
+    bad_ids_text_full_kor_path = "bad_ids_text_full_kor.bin"
     
     everstone_id = 0x70
     egg_id = 0xFD
@@ -134,37 +135,47 @@ class GSCUtils:
     stat_id_base_conv_table = [0,1,2,5,3,4]
     stat_id_iv_conv_table = [0,0,1,2,3,3]
     stat_id_exp_conv_table = [0,1,2,3,4,4]
-    patch_set_base_pos = [0x13, 0xC6, 0]
-    patch_set_start_info_pos = [7, 0x11A, 0xFC]
+    patch_set_base_pos = [0x13, 0x186, 0, 0xC6] #[0x13, 0xC6, 0]
+    patch_set_start_info_pos = [7, 0x1DA, 0xFC, 0x11A] #[7, 0x11A, 0xFC]
     egg_value = 0x38
     min_level = 2
     max_level = 100
     num_stats = 6
+
+    korean_language_2_bytes_special_language = 0x1F # Last bit in 32 bits
+    korean_special_replacement = 0x6B
+    korean_patched_special_replacement = 0x6C
+    num_valid_user_input_tables = 0xC
+    eol_user_input_table_value = 0xC
+    jpn_name_len = 5
+    start_valid_user_input_tables_byte = (0x100 - (num_valid_user_input_tables * num_valid_user_input_tables))
+    prohibited_char = 0xFE
+    prohibited_char_replacement = 0x2D
     
     evolution_ids = None
     mail_ids = None
     base_stats = None
-    pokemon_names = None
     no_mail_section = None
+    no_mail_section_old = None
     moves_pp_list = None
     learnsets = None
     exp_groups = None
     exp_lists = None
-    egg_nick = None
     
     def __init__(self):
         curr_class = type(self)
         curr_class.evolution_ids = GSCUtilsLoaders.prepare_evolution_check_list(GSCUtilsMisc.read_data(self.get_path(curr_class.evolution_ids_path)))
         curr_class.mail_ids = GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(curr_class.mail_ids_path)))
         curr_class.no_mail_section = GSCUtilsMisc.read_data(self.get_path(curr_class.no_mail_path))
+        curr_class.no_mail_section_old = GSCUtilsMisc.read_data(self.get_path(curr_class.no_mail_old_path))
         curr_class.base_random_section = GSCUtilsMisc.read_data(self.get_path(curr_class.base_random_path))
         curr_class.base_stats = GSCUtilsLoaders.prepare_stats(GSCUtilsMisc.read_data(self.get_path(curr_class.base_stats_path)), curr_class.num_stats, curr_class.num_entries)
-        curr_class.pokemon_names = GSCUtilsLoaders.text_to_bytes(self.get_path(curr_class.pokemon_names_path), self.get_path(curr_class.text_conv_path))
         curr_class.moves_pp_list = GSCUtilsMisc.read_data(self.get_path(curr_class.moves_pp_list_path))
         curr_class.learnsets = GSCUtilsLoaders.prepare_learnsets(GSCUtilsMisc.read_data(self.get_path(curr_class.learnset_evos_path)))
         curr_class.exp_groups = GSCUtilsMisc.read_data(self.get_path(curr_class.exp_groups_path))
         curr_class.exp_lists = GSCUtilsLoaders.prepare_exp_lists(GSCUtilsLoaders.read_text_file(self.get_path(curr_class.exp_lists_path)))
-        curr_class.egg_nick = GSCUtilsMisc.read_data(self.get_path(curr_class.egg_nick_path))
+        curr_class.bad_ids_text_special_to_kor, curr_class.bad_ids_text_special_from_kor = GSCUtilsLoaders.load_replacement_data_double_dict(GSCUtilsMisc.read_data(self.get_path(curr_class.bad_ids_and_replacement_text_special_kor_path)))
+        curr_class.bad_ids_text_kor_full_list = (GSCUtilsMisc.read_data(self.get_path(curr_class.bad_ids_text_full_kor_path)))
     
     def get_path(self, target):
         return self.base_folder + target
@@ -244,21 +255,25 @@ class GSCUtils:
     def get_evolution_item(species):
         return GSCUtils.evolution_ids[species][1]
     
-    def get_patch_set_num_index(is_mail, is_japanese):
+    def get_patch_set_num_index(is_mail, is_japanese, is_old_mail_data):
         patch_sets_num = 2
         patch_sets_index = 0
         if is_mail:
             patch_sets_num = 1
             patch_sets_index = 1
+            if is_old_mail_data:
+                patch_sets_index = 3
+            # Japanese does not have a "New" mail form...
+            # So just replace it regardless...
             if is_japanese:
                 patch_sets_index = 2
         return patch_sets_num, patch_sets_index
     
-    def apply_patches(data, patch_set, utils_class, is_mail=False, is_japanese=False):
+    def apply_patches(data, patch_set, utils_class, is_mail=False, is_japanese=False, is_old_mail_data = False):
         """
         Applies patch data (turns the previously read data into 0xFE)
         """
-        patch_sets_num, patch_sets_index = utils_class.get_patch_set_num_index(is_mail, is_japanese)
+        patch_sets_num, patch_sets_index = utils_class.get_patch_set_num_index(is_mail, is_japanese, is_old_mail_data)
         
         base = utils_class.patch_set_base_pos[patch_sets_index]
         start = utils_class.patch_set_start_info_pos[patch_sets_index]
@@ -272,11 +287,11 @@ class GSCUtils:
             elif read_pos > 0 and (read_pos+base) < len(data):
                 data[read_pos+base-1] = 0xFE
 
-    def create_patches_data(data, patch_set, utils_class, is_mail=False, is_japanese=False):
+    def create_patches_data(data, patch_set, utils_class, is_mail=False, is_japanese=False, is_old_mail_data = False):
         """
         Creates patch data (turns 0xFE into a patch offset)
         """
-        patch_sets_num, patch_sets_index = utils_class.get_patch_set_num_index(is_mail, is_japanese)
+        patch_sets_num, patch_sets_index = utils_class.get_patch_set_num_index(is_mail, is_japanese, is_old_mail_data)
         
         base = utils_class.patch_set_base_pos[patch_sets_index]
         start = utils_class.patch_set_start_info_pos[patch_sets_index]
@@ -301,6 +316,80 @@ class GSCUtils:
                 i = len(patch_set)-start-1
             patch_set[start+i] = 0xFF
             i+=1
+
+    def convert_language_int_to_list(languages_int):
+        ret_val = []
+        index = 0
+
+        while languages_int != 0:
+            if languages_int & (1 << index):
+                languages_int &= ~(1 << index)
+                if index != GSCUtils.korean_language_2_bytes_special_language:
+                    ret_val += [index]
+            index += 1
+        return ret_val
+
+    def convert_language_list_to_int(languages_list, mon_data, gen):
+        from .text_conversions import PokemonNamesForGen, PokemonTextConversions
+        ret_val = 0
+        mon = mon_data[0]
+
+        languages_list = list(languages_list)
+        if len(languages_list) <= 0:
+            return ret_val
+
+        for language in languages_list:
+            language_bit = 1 << language
+            ret_val |= language_bit
+            if language == PokemonNamesForGen.KOREAN_LANGUAGE:
+                out_value, is_partial, is_question_mark = PokemonTextConversions.convert_genx_char_to_char(mon.nickname.values[0], gen, language)
+                if is_partial:
+                    out_value, is_partial, is_question_mark = PokemonTextConversions.convert_genx_char_to_char(mon.ot_name.values[0], gen, language)
+                if is_partial:
+                    language_bit = 1 << GSCUtils.korean_language_2_bytes_special_language
+                    ret_val |= language_bit
+        return ret_val
+
+    def single_mon_from_data_multilanguage(checks, data):
+        from .text_conversions import PokemonNamesForGen
+        language_valid_list = []
+        language_match_list = []
+        language_ret_data_dict = dict()
+        gen = 2
+
+        for language in PokemonNamesForGen.all_languages_list:
+            non_checked = GSCTradingPokémonInfo.set_data(data)
+            non_checked.apply_all_text_transforms_to_all(language)
+
+            checks.language = language
+            ret_data = GSCUtils.single_mon_from_data(checks, data)
+
+            if ret_data is None:
+                continue
+            
+            language_ret_data_dict[language] = ret_data
+
+            if ret_data[0].nickname.get_length() > PokemonNamesForGen.get_pokemon_max_nickname_length(gen, language):
+                continue
+
+            if ret_data[0].ot_name.get_length() > PokemonNamesForGen.get_trainer_max_name_length(gen, language):
+                continue
+
+            if ret_data[0].is_text_equal(non_checked, do_mail = False):
+                language_match_list += [language]
+
+        if len(language_ret_data_dict.keys()) <= 0:
+            return None
+
+        language_ref_list = language_match_list
+        if len(language_match_list) <= 0:
+            language_ref_list = list(language_ret_data_dict.keys())
+        mon_data_out = language_ret_data_dict[language_ref_list[0]]
+
+        #print(mon_data_out[0].get_data())
+        #print(non_checked.get_data())
+        #print(language_ref_list)
+        return mon_data_out + [GSCUtils.convert_language_list_to_int(language_ref_list, mon_data_out, gen)]
     
     def single_mon_from_data(checks, data):
         ret = None
@@ -308,12 +397,19 @@ class GSCUtils:
         # Prepare sanity checks stuff
         checks.reset_species_item_list()
         checks.set_single_team_size()
-        checks.prepare_text_buffer()
+        checks.reset_text_buffers()
         checks.prepare_patch_sets_buffer()
         checks.prepare_species_buffer()
         checker = checks.single_pokemon_checks_map
+        has_new_mail_data = True
+        if len(data) <= len(checker):
+            checker = checks.single_pokemon_checks_map_old
+            has_new_mail_data = False
         
         if len(data) > len(checker):
+            # Prepares the pokémon data. For the raw one
+            raw = GSCTradingPokémonInfo.set_data(data, is_new_mail_data = has_new_mail_data)
+
             # Handle getting/sending eggs. That requires one extra byte
             is_egg = False
             if data[len(checker)] == GSCUtils.egg_value:
@@ -325,15 +421,20 @@ class GSCUtils:
             else:
                 checks.species_cleaner(data[0])
             checks.prepare_species_buffer()
+
+            # Account for mail shenanigans
+            if raw.has_mail():
+                from .text_conversions import PokemonNamesForGen
+                # Avoid patching a new newline and end of line in a converted korean mail...
+                if raw.mail.get_mail_language() == PokemonNamesForGen.KOREAN_LANGUAGE:
+                    checks.do_mail_newline_checks = False
                 
             # Applies the checks to the received data.
             # If the sanity checks are off, this will be a simple copy
             purified_data = checks.apply_checks_to_data(checker, data)
                 
-            # Prepares the pokémon data. For both the cleaned one and
-            # the raw one
-            raw = GSCTradingPokémonInfo.set_data(data)
-            mon = GSCTradingPokémonInfo.set_data(purified_data)
+            # Prepares the pokémon data. For the cleaned one
+            mon = GSCTradingPokémonInfo.set_data(purified_data, is_new_mail_data = has_new_mail_data)
             
             # If the sanity checks are on, has the pokémon changed
             # too much from the cleaning?
@@ -341,11 +442,185 @@ class GSCUtils:
                 ret = [mon, is_egg]
         return ret
     
-    def single_mon_to_data(mon, is_egg):
+    def single_mon_to_data(mon, is_egg, use_new_mail_data = True):
         egg_val = 0
         if is_egg:
             egg_val = GSCUtils.egg_value
-        return mon.get_data() + [egg_val]
+        return mon.get_data(is_new_mail_data = use_new_mail_data) + [egg_val]
+
+    def process_from_korean_special_table_value(in_data, utils_class, is_first_nybble):
+        table_value = 0
+        if is_first_nybble:
+            table_value = ((in_data - utils_class.start_valid_user_input_tables_byte) % utils_class.num_valid_user_input_tables) + 1
+        else:
+            table_value = ((in_data - utils_class.start_valid_user_input_tables_byte) // utils_class.num_valid_user_input_tables) + 1
+        if table_value == utils_class.eol_user_input_table_value:
+            table_value = utils_class.end_of_line
+        if in_data == utils_class.end_of_line:
+            table_value = utils_class.end_of_line
+        return table_value
+
+    def apply_text_transform_protect_international_from_korean_special(utils_class, in_char_list, processing_obj):
+        if len(in_char_list) == 1:
+            return [in_char_list[0] & 0xF]
+        if len(in_char_list) == 2:
+            corr_mask = (in_char_list[0] << 3) & 0x80
+            return [in_char_list[1] & (~corr_mask)]
+        if len(in_char_list) == 3:
+            return [utils_class.process_from_korean_special_table_value(in_char_list[2], utils_class, True)]
+        if len(in_char_list) == 4:
+            corr_mask = (in_char_list[0] << 2) & 0x80
+            return [in_char_list[3] & (~corr_mask)]
+        if len(in_char_list) == 5:
+            return [utils_class.process_from_korean_special_table_value(in_char_list[2], utils_class, False)]
+        if len(in_char_list) == 6:
+            # Are we encountering a Japanese-truncated Korean name?
+            if (in_char_list[5] == utils_class.end_of_line) and (not processing_obj.has_encountered_eol):
+                # If yes, force the next one to be EOL.
+                # Technically it will be EOL due to the extra bytes regardless,
+                # but might as well be sure.
+                processing_obj.is_korean_special_was_japanese_truncated = True
+                return [0xF0]
+            processing_obj.is_korean_special_was_japanese_truncated = False
+            return [in_char_list[5]]
+        if len(in_char_list) == 7:
+            if processing_obj.is_korean_special_was_japanese_truncated:
+                return [utils_class.end_of_line]
+            return [utils_class.process_from_korean_special_table_value(in_char_list[6], utils_class, True)]
+        if len(in_char_list) == 8:
+            return [in_char_list[7]]
+        if len(in_char_list) == 9:
+            # Add back the missing byte from the start
+            return [utils_class.process_from_korean_special_table_value(in_char_list[6], utils_class, False), in_char_list[8]]
+        return [in_char_list[-1]]
+
+    def apply_text_transform_protect_korean_from_jpn_special(utils_class, in_char_list):
+        if len(in_char_list) == 1:
+            return []
+        if (len(in_char_list) >= 2) and (len(in_char_list) < (2 + utils_class.jpn_name_len)):
+            index = len(in_char_list) - 2
+            corr_mask = (in_char_list[0] << (7 - index)) & 0x80
+            out_value = [in_char_list[1 + index] & (~corr_mask)]
+            if index == (utils_class.jpn_name_len - 1):
+                # Add back the missing two bytes from the start
+                out_value += [utils_class.end_of_line, utils_class.end_of_line]
+            return out_value
+        return [in_char_list[-1]]
+
+    def replace_fe_in_patched_out_data(utils_class, text_entry):
+        for i in range(len(text_entry.values)):
+            if text_entry.values[i] == utils_class.prohibited_char:
+                text_entry.values[i] = utils_class.prohibited_char_replacement
+
+    def patch_out_bad_chars_protect_international_from_korean_buffered_only(utils_class, text_entry):
+        if text_entry.values[0] == utils_class.korean_special_replacement:
+            # Pre-applied
+            return
+
+        #print("PATCHING KOR FOR INT AND JPN")
+        #print(text_entry.values)
+        first_bytes = []
+        second_bytes = []
+        corr_bits = []
+        # Split the data...
+        for i in range(5):
+            first_bytes += [text_entry.values[(i * 2)]]
+            if first_bytes[i] == utils_class.end_of_line:
+                first_bytes[i] = utils_class.eol_user_input_table_value
+            if first_bytes[i] > utils_class.num_valid_user_input_tables:
+                first_bytes[i] = utils_class.eol_user_input_table_value - 1
+            if i != 0:
+                first_bytes[i] -= 1
+            second_bytes += [text_entry.values[(i * 2) + 1]]
+            if (second_bytes[i] < 0x60) and (second_bytes[i] != utils_class.end_of_line):
+                corr_bits += [1]
+            else:
+                corr_bits += [0]
+
+        # Preprocess second_bytes[0,1]
+        if corr_bits[0] != 0:
+            second_bytes[0] |= 0x80
+        if corr_bits[1] != 0:
+            second_bytes[1] |= 0x80
+
+        # Now re-insert it...
+        text_entry.values[0] = utils_class.korean_special_replacement
+        text_entry.values[1] = first_bytes[0] | (corr_bits[0] << 4) | (corr_bits[1] << 5) | 0x80
+        text_entry.values[2] = second_bytes[0]
+        text_entry.values[3] = utils_class.start_valid_user_input_tables_byte + first_bytes[1] + (first_bytes[2] * utils_class.num_valid_user_input_tables)
+        text_entry.values[4] = second_bytes[1]
+        text_entry.values[5] = utils_class.end_of_line
+        text_entry.values[6] = second_bytes[2]
+        text_entry.values[7] = utils_class.start_valid_user_input_tables_byte + first_bytes[3] + (first_bytes[4] * utils_class.num_valid_user_input_tables)
+        text_entry.values[8] = second_bytes[3]
+        text_entry.values[9] = second_bytes[4]
+
+        # End it all by replacing FEs
+        utils_class.replace_fe_in_patched_out_data(utils_class, text_entry)
+
+    def patch_out_bad_chars_protect_korean_from_jpn_buffered_only(utils_class, text_entry):
+        # While patching these chars could be done even during synchronous
+        # trades, we can only do it in buffered trades due to the need to
+        # get the language of the name beforehand to confirm that patching
+        # should be done...
+
+        if text_entry.values[0] == utils_class.korean_patched_special_replacement:
+            # Pre-applied
+            return
+
+        has_bad_chars = False
+        bad_chars_list = []
+        for i in range (len(text_entry.values)):
+            if text_entry.values[i] == utils_class.end_of_line:
+                break
+            if text_entry.values[i] in utils_class.bad_ids_text_kor_full_list:
+                has_bad_chars = True
+                bad_chars_list += [1]
+            else:
+                bad_chars_list += [0]
+        if not has_bad_chars:
+            return
+
+        #print("PATCHING JPN FOR KOR")
+        #print(text_entry.values)
+        # We have confirmed that bad characters for Korean are present...
+        # Now patch them out...
+        # We could patch them before, but I'd like the steps to be separate.
+        temp_values = text_entry.values[:]
+        corr_bit_value = 0
+        for i in range(len(bad_chars_list)):
+            corr_bit_value |= bad_chars_list[i] << i
+            if bad_chars_list[i] == 1:
+                temp_values[i] |= 0x80
+
+        text_entry.values[0] = utils_class.korean_patched_special_replacement
+        text_entry.values[1] = corr_bit_value | 0x80
+        for i in range(len(bad_chars_list)):
+            text_entry.values[2 + i] = temp_values[i]
+        for i in range(2 + len(bad_chars_list), len(text_entry.values)):
+            text_entry.values[i] = utils_class.end_of_line
+
+        # End it all by replacing FEs
+        utils_class.replace_fe_in_patched_out_data(utils_class, text_entry)
+
+    def get_general_string_ready_for_counting_lines_and_chars(target_str):
+        lines_to_process = target_str.split("\n")
+        processed_lines = []
+        for i in range(len(lines_to_process)):
+            line = lines_to_process[i]
+            line_interruptions = line.replace("<", ">").split(">")
+            final_line = ""
+            # Basically, replace characters within <> with a 1 for counting
+            for i in range(len(line_interruptions)):
+                if (i % 2) == 0:
+                    final_line += line_interruptions[i]
+                else:
+                    final_line += "1"
+            processed_lines += [final_line]
+        return processed_lines
+
+    def get_basic_checks():
+        return GSCChecks([0,0,0], True, use_strict_language_checks = True)
 
 class GSCUtilsMisc:
     """
@@ -360,7 +635,8 @@ class GSCUtilsMisc:
                 tmpdata = list(newFile.read())
                 data = tmpdata
         except FileNotFoundError as e:
-            pass
+            if debug_print_if_file_is_missing:
+                print("File not found: " + str(target))
         return data
 
     def write_data(target, data):
@@ -418,10 +694,10 @@ class GSCUtilsMisc:
             data[i] = (in_data>>(8*i)) & 0xFF
         return data
 
-    def from_n_bytes_le(data, n_bytes):
+    def from_n_bytes_le(data, n_bytes, start = 0):
         out_data = 0
         for i in range(n_bytes):
-            out_data |= data[i]<<(8*i)
+            out_data |= data[start + i]<<(8*i)
         return out_data
 
     def inc_byte(val):
@@ -460,6 +736,20 @@ class GSCUtilsMisc:
         if data is not None:
             return data
         return default_data
+
+    def print_table_hex(data, num_elems_per_column = 16):
+        if data is None:
+            return
+        print("{")
+        num_elems = len(data)
+        num_rows = (num_elems + num_elems_per_column - 1) // num_elems_per_column
+        for i in range(num_rows):
+            for j in range(num_elems_per_column):
+                wanted_elem = (i * num_elems_per_column) + j
+                if wanted_elem < len(data):
+                    print("{0:02x} ".format(data[wanted_elem]), end='')
+            print()
+        print("}")
     
     def verbose_print(to_print, verbose, end='\n'):
         if verbose:
@@ -493,6 +783,12 @@ class GSCTradingText:
             return True
         return False
 
+    def get_length(self):
+        for i in range(len(self.values) - self.start_at):
+            if self.values[i] == self.utils_class.end_of_line:
+                return i - self.start_at
+        return len(self.values) - self.start_at
+
     def create_from_string(string, length=0xB):
         from .text_conversions import PokemonTextConversions
         data = [self.utils_class.end_of_line] * length
@@ -500,6 +796,83 @@ class GSCTradingText:
         for i in range(min_length):
             data[i] = PokemonTextConversions.convert_char_to_gen12_char(string[i]) & 0xFF
         return GSCTradingText(data, 0, length=length)
+
+class GSCTradingMailData:
+    """
+    Class which contains mail data from the trading data.
+    """
+
+    mail_len = 0x41 # 0x21
+    mail_len_old = 0x21
+    sender_len = 0xE # INT: 0x8 for OT Name + 2 for message language + 2 for OT ID + 1 for Mon + 1 for Mail type
+                     # KOR: 0xA for OT Name + 0 for message language + 2 for OT ID + 1 for Mon + 1 for Mail type
+    language_sender_pos_int = 0x8
+    reference_gen = 2
+
+    def __init__(self, data_mail = None, data_sender = None):
+        if data_mail is None:
+            data_mail = [0]
+        while len(data_mail) < self.mail_len:
+            data_mail += [0]
+        if data_sender is None:
+            data_sender = [0]
+        while len(data_sender) < self.sender_len:
+            data_sender += [0]
+        self.data_mail = GSCTradingText(data_mail, 0, length = self.mail_len)
+        self.data_sender = GSCTradingText(data_sender, 0, length = self.sender_len)
+        self.utils_class = self.get_utils_class()
+    
+    def get_utils_class(self):
+        return GSCUtils
+
+    def get_data_mail(self, is_new_mail_data = True):
+        if is_new_mail_data:
+            return self.data_mail.values
+        return self.data_mail.values[:self.mail_len_old]
+
+    def get_data_mail_sender(self):
+        return self.data_sender.values
+
+    def get_int_mail_data_language(mail_language_data, gen):
+        from .text_conversions import PokemonNamesForGen
+        language_str = PokemonNamesForGen.convert_generic_name_general_for_gen(mail_language_data, gen)
+        if len(language_str) < 2:
+            return PokemonNamesForGen.ENGLISH_LANGUAGE
+        if language_str[0] != "E":
+            return PokemonNamesForGen.ENGLISH_LANGUAGE
+        if language_str[1] not in PokemonNamesForGen.language_str_short_list_small:
+            return PokemonNamesForGen.ENGLISH_LANGUAGE
+        return PokemonNamesForGen.sorted_languages_list[PokemonNamesForGen.language_str_short_list_small.index(language_str[1])]
+
+    def get_mail_language(self):
+        return GSCTradingMailData.get_int_mail_data_language(self.get_data_mail_sender()[self.language_sender_pos_int : self.language_sender_pos_int+2], self.reference_gen)
+
+    def get_mail_language_data_for_language(language, gen):
+        from .text_conversions import PokemonNamesForGen, PokemonTextConversions
+        if (language == PokemonNamesForGen.ENGLISH_LANGUAGE) or (language not in PokemonNamesForGen.sorted_languages_list):
+            return [0, 0]
+        language_str = "E" + PokemonNamesForGen.language_str_short_list_small[PokemonNamesForGen.sorted_languages_list.index(new_language)]
+        language_data = []
+        for i in range(len(language_str)):
+            language_data += [PokemonTextConversions.convert_char_to_genx_char(language_str[i], gen, None)]
+        return language_data
+
+    def set_mail_language(self, new_language):
+        data_to_set = GSCTradingMailData.get_mail_language_data_for_language(new_language, self.reference_gen)
+        for i in range(len(data_to_set)):
+            self.data_sender.values[self.language_sender_pos_int + i] = data_to_set[i]
+
+    def set_data_mail(self, data):
+        max_copy_len = min(len(self.data_mail.values), len(data))
+        for i in range(max_copy_len):
+            self.data_mail.values[i] = data[i]
+        if len(data) < len(self.data_mail.values):
+            self.data_mail.values[len(data)] = self.utils_class.end_of_line
+
+    def set_data_mail_sender(self, data):
+        max_copy_len = min(len(self.data_sender.values), len(data))
+        for i in range(max_copy_len):
+            self.data_sender.values[i] = data[i]
     
 class GSCTradingPartyInfo:
     """
@@ -538,11 +911,14 @@ class GSCTradingPokémonInfo:
     """
     Class which contains information about the pokémon from the trading data.
     """
+    unown_species = 201
     pokemon_data_len = 0x30
     ot_name_len = 0xB
     nickname_len = 0xB
-    mail_len = 0x21
-    sender_len = 0xE
+    mail_len = 0x41 # 0x21
+    mail_len_old = 0x21
+    sender_len = 0xE # INT: 0x8 for OT Name + 2 for message language + 2 for OT ID + 1 for Mon + 1 for Mail type
+                     # KOR: 0xA for OT Name + 0 for message language + 2 for OT ID + 1 for Mon + 1 for Mail type
     
     species_pos = 0
     item_pos = 1
@@ -557,10 +933,12 @@ class GSCTradingPokémonInfo:
     egg_cycles_pos = 0x1B
     status_pos = 0x20
     ot_id_pos = 6
+    reference_gen = 2
     
     no_moves_equality_ranges = [range(0,2), range(6,0x17), range(0x1B, pokemon_data_len)]
     full_equality_ranges = [range(0, pokemon_data_len)]
     all_lengths = [pokemon_data_len, ot_name_len, nickname_len, mail_len, sender_len]
+    all_lengths_old = [pokemon_data_len, ot_name_len, nickname_len, mail_len_old, sender_len]
 
     def __init__(self, data, start, length=pokemon_data_len):
         # For debugging purposes
@@ -569,8 +947,8 @@ class GSCTradingPokémonInfo:
             start = 0
         self.values = data[start:start+length]
         self.mail = None
-        self.mail_sender = None
         self._precalced_lengths = GSCUtilsMisc.calc_divide_lengths(self.all_lengths)
+        self._precalced_lengths_old = GSCUtilsMisc.calc_divide_lengths(self.all_lengths_old)
         self.utils_class = self.get_utils_class()
         self.text_class = self.get_text_class()
     
@@ -595,20 +973,42 @@ class GSCTradingPokémonInfo:
     def add_nickname(self, data, start):
         self.nickname = self.text_class(data, start, length=self.nickname_len)
 
-    def add_mail(self, data, start):
-        self.mail = self.text_class(data, start, length=self.mail_len)
+    def add_mail(self, data, start, is_new_mail_data = True):
+        if self.mail is None:
+            self.mail = GSCTradingMailData()
+        mail_len_data = self.mail_len_old
+        if is_new_mail_data:
+            mail_len_data = self.mail_len
+        self.mail.set_data_mail(data[start:start+mail_len_data])
         
     def add_mail_sender(self, data, start):
-        self.mail_sender = self.text_class(data, start, length=self.sender_len, data_start=0)
+        if self.mail is None:
+            self.mail = GSCTradingMailData()
+        self.mail.set_data_mail_sender(data[start:start+self.sender_len])
     
-    def is_nicknamed(self):
-        return not self.nickname.values_equal(self.utils_class.pokemon_names[self.get_species()])
+    def is_nicknamed(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return not self.nickname.values_equal(PokemonNamesForGen.get_pokemon_name_for_gen(self.get_species(), self.reference_gen, language=language))
+
+    def get_nickname_general(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return PokemonNamesForGen.convert_generic_name_general_for_gen(self.nickname.values, self.reference_gen, language=language)
+
+    def get_ot_name_general(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return PokemonNamesForGen.convert_generic_name_general_for_gen(self.ot_name.values, self.reference_gen, language=language)
     
-    def set_default_nickname(self):
-        self.add_nickname(self.utils_class.pokemon_names[self.get_species()], 0)
+    def set_default_trainer_name(self, language):
+        from .text_conversions import PokemonNamesForGen
+        self.add_ot_name(PokemonNamesForGen.get_trainer_name_for_gen(self.reference_gen, language=language), 0)
     
-    def set_egg_nickname(self):
-        self.add_nickname(self.utils_class.egg_nick, 0)
+    def set_default_nickname(self, language):
+        from .text_conversions import PokemonNamesForGen
+        self.add_nickname(PokemonNamesForGen.get_pokemon_name_for_gen(self.get_species(), self.reference_gen, language=language), 0)
+    
+    def set_egg_nickname(self, language):
+        from .text_conversions import PokemonNamesForGen
+        self.add_nickname(PokemonNamesForGen.get_egg_name_for_gen(self.reference_gen, language=language), 0)
     
     def get_species(self):
         return self.values[self.species_pos]
@@ -656,6 +1056,12 @@ class GSCTradingPokémonInfo:
         self.values[self.moves_pos + pos] = val
         if max_pp:
             self.set_pp(pos, self.utils_class.moves_pp_list[val])
+
+    # Default = trade-based friendship
+    def set_friendship(self, val=None):
+        if val is None:
+            val = 70
+        self.values[self.egg_cycles_pos] = val
     
     def set_hatching_cycles(self, val=1):
         self.values[self.egg_cycles_pos] = val
@@ -722,6 +1128,13 @@ class GSCTradingPokémonInfo:
         for i in range(4):
             ret[i] = calc_val[i>>1][i&1]
         return ret
+    
+    def get_unown_letter(self):
+        ivs = self.get_ivs()
+        letter_sum = 0
+        for i in range(4):
+            letter_sum |= ((ivs[i] >> 1) & 3) << (2 * (4 - 1 - i))
+        return letter_sum // 10
 
     def get_curr_hp(self):
         return GSCUtilsMisc.read_short(self.values, self.curr_hp_pos)
@@ -755,13 +1168,117 @@ class GSCTradingPokémonInfo:
         if not self.are_moves_and_pp_same(other):
             return False
         if not weak:
-            if not (self.ot_name.values_equal(other.ot_name.values) and self.nickname.values_equal(other.nickname.values)):
+            if not self.is_text_equal(other):
                 return False
-            if self.has_mail():
-                if not (self.mail.values_equal(other.mail.values) and self.mail_sender.values_equal(other.mail_sender.values)):
-                    return False
         return True
-    
+
+    def is_text_equal(self, other, do_mail = True):
+        if not (self.ot_name.values_equal(other.ot_name.values) and self.nickname.values_equal(other.nickname.values)):
+            return False
+        if do_mail and self.has_mail():
+            if not (self.mail.data_mail.values_equal(other.mail.data_mail.values) and self.mail.data_sender.values_equal(other.mail.data_sender.values)):
+                return False
+        return True
+
+    # Process special characters we inject...
+    # These can be done in synchronous mode as well...
+    def apply_all_text_transforms_to_all(self, language):
+        self.apply_all_text_transforms(self.ot_name, language)
+        self.apply_all_text_transforms(self.nickname, language)
+        if self.has_mail():
+            self.apply_all_text_transforms(self.mail.data_mail, language, is_mail = True)
+            self.apply_all_text_transforms(self.mail.data_sender, language, is_mail = True)
+
+    def apply_all_text_transforms(self, text_entry, language, is_mail = False):
+        self.apply_transform_kor_bad_chars(text_entry, language)
+        self.apply_transform_protect_international_from_kor(text_entry, language, is_mail)
+        self.apply_transform_protect_korean_from_jpn(text_entry, language, is_mail)
+
+    def apply_transform_kor_bad_chars(self, text_entry, language):
+        from .text_conversions import PokemonNamesForGen
+        if language == PokemonNamesForGen.KOREAN_LANGUAGE:
+            return
+
+        for i in range(len(text_entry.values)):
+            if text_entry.values[i] == self.utils_class.end_of_line:
+                break
+            if text_entry.values[i] in self.utils_class.bad_ids_text_special_from_kor.keys():
+                text_entry.values[i] = self.utils_class.bad_ids_text_special_from_kor[text_entry.values[i]]
+
+    def apply_transform_protect_international_from_kor(self, text_entry, language, is_mail):
+        from .text_conversions import PokemonNamesForGen
+        if language != PokemonNamesForGen.KOREAN_LANGUAGE:
+            return
+        if is_mail:
+            return
+        if text_entry.values[0] != self.utils_class.korean_special_replacement:
+            # Pre-applied
+            return
+
+        in_chars = []
+        out_chars = []
+        container_obj = types.SimpleNamespace()
+        container_obj.has_encountered_eol = False
+        for i in range(1, len(text_entry.values)):
+            in_val = text_entry.values[i]
+            if in_val == self.utils_class.prohibited_char_replacement:
+                in_val = self.utils_class.prohibited_char
+            in_chars += [in_val]
+            out = self.utils_class.apply_text_transform_protect_international_from_korean_special(self.utils_class, in_chars, container_obj)
+            out_chars += out
+            if self.utils_class.end_of_line in out:
+                container_obj.has_encountered_eol = True
+
+        for i in range(len(text_entry.values)):
+            text_entry.values[i] = out_chars[i]
+
+    def apply_transform_protect_korean_from_jpn(self, text_entry, language, is_mail):
+        from .text_conversions import PokemonNamesForGen
+        if language == PokemonNamesForGen.KOREAN_LANGUAGE:
+            return
+        if is_mail:
+            return
+        if text_entry.values[0] != self.utils_class.korean_patched_special_replacement:
+            return
+
+        in_chars = []
+        out_chars = []
+        for i in range(1, len(text_entry.values)):
+            in_val = text_entry.values[i]
+            if in_val == self.utils_class.prohibited_char_replacement:
+                in_val = self.utils_class.prohibited_char
+            in_chars += [in_val]
+            out_chars += self.utils_class.apply_text_transform_protect_korean_from_jpn_special(self.utils_class, in_chars)
+
+        for i in range(len(text_entry.values)):
+            text_entry.values[i] = out_chars[i]
+
+    # Inject special characters and patch out bad chars for specific languages.
+    # This can only be done with all the data available, so buffered only.
+    # But the unpatching can be done in synchronous mode as well by the checks.
+    def patch_out_bad_chars_for_language_buffered_only(self, target_language, checks, is_egg):
+        from .text_conversions import PokemonNamesForGen
+        if target_language is None:
+            return
+
+        own_data = self.utils_class.single_mon_to_data(self, is_egg)
+        ret_data = self.utils_class.single_mon_from_data_multilanguage(checks, own_data)
+        # HOW?!
+        if ret_data is None:
+            return
+        # Get the languages for which this mon's data is valid...
+        language_value = ret_data[2]
+        is_korean_2bytes_valid = (language_value & (1 << GSCUtils.korean_language_2_bytes_special_language)) != 0
+        valid_languages_list = self.utils_class.convert_language_int_to_list(language_value)
+
+        if (target_language == PokemonNamesForGen.KOREAN_LANGUAGE) and (valid_languages_list == [PokemonNamesForGen.JAPANESE_LANGUAGE]): # This automatically means it's not 2-bytes Korean
+            self.utils_class.patch_out_bad_chars_protect_korean_from_jpn_buffered_only(self.utils_class, self.ot_name)
+            self.utils_class.patch_out_bad_chars_protect_korean_from_jpn_buffered_only(self.utils_class, self.nickname)
+
+        if (target_language != PokemonNamesForGen.KOREAN_LANGUAGE) and (valid_languages_list == [PokemonNamesForGen.KOREAN_LANGUAGE]) and is_korean_2bytes_valid:
+            self.utils_class.patch_out_bad_chars_protect_international_from_korean_buffered_only(self.utils_class, self.ot_name)
+            self.utils_class.patch_out_bad_chars_protect_international_from_korean_buffered_only(self.utils_class, self.nickname)
+
     def get_same_moves(self):
         """
         Returns for each index the list of indexes with the same move.
@@ -824,33 +1341,42 @@ class GSCTradingPokémonInfo:
             return True
         return False
 
-    def get_data(self):
+    def get_data(self, is_new_mail_data = True):
         """
         Returns all the data used to represent this pokemon.
         """
-        sources = [self, self.ot_name, self.nickname]
-        mail_sources = [self.mail, self.mail_sender]
-        data = [0] * self._precalced_lengths[len(sources)+len(mail_sources)]
+        sources = [self.values, self.ot_name.values, self.nickname.values]
+        relevant_lengths = self._precalced_lengths
+        if not is_new_mail_data:
+            relevant_lengths = self._precalced_lengths_old
+        if self.has_mail():
+            mail_sources = [self.mail.get_data_mail(is_new_mail_data = is_new_mail_data), self.mail.get_data_mail_sender()]
+        else:
+            mail_sources = [None, None]
+        data = [0] * relevant_lengths[len(sources)+len(mail_sources)]
         for i in range(len(sources)):
-            GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[i], sources[i].values)
+            GSCUtilsMisc.copy_to_data(data, relevant_lengths[i], sources[i])
         if self.has_mail():
             for i in range(len(mail_sources)):
-                GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[i+len(sources)], mail_sources[i].values)
+                GSCUtilsMisc.copy_to_data(data, relevant_lengths[i+len(sources)], mail_sources[i])
         return data
 
-    def set_data(data):
+    def set_data(data, is_new_mail_data = True):
         """
         Creates an entry from the given data.
         """
         mon = GSCTradingPokémonInfo(data, 0)
-        mon.add_ot_name(data, mon._precalced_lengths[1])
-        mon.add_nickname(data, mon._precalced_lengths[2])
+        relevant_lengths = mon._precalced_lengths
+        if not is_new_mail_data:
+            relevant_lengths = mon._precalced_lengths_old
+        mon.add_ot_name(data,relevant_lengths[1])
+        mon.add_nickname(data, relevant_lengths[2])
         if mon.has_mail():
-            mon.add_mail(data, mon._precalced_lengths[3])
-            mon.add_mail_sender(data, mon._precalced_lengths[4])
+            mon.add_mail(data, relevant_lengths[3], is_new_mail_data = is_new_mail_data)
+            mon.add_mail_sender(data, relevant_lengths[4])
         return mon
 
-    def create_from_scratch(species = 1, item = 0, level = 2, moves = [1, 2, 3, 4], ot_name = "AAAAA", ot_id = 1):
+    def create_from_scratch(species = 1, item = 0, level = 2, moves = [1, 2, 3, 4], ot_name = "AAAAA", ot_id = 1, language = 0):
         """
         Creates an entry from no data.
         """
@@ -860,7 +1386,7 @@ class GSCTradingPokémonInfo:
         mon.set_level(level)
         for i in range(len(moves)):
             mon.set_move(i, moves[i])
-        mon.set_default_nickname()
+        mon.set_default_nickname(language)
         mon.set_ot_name(ot_name)
         mon.set_ot_id(ot_id)
         mon.heal()
@@ -877,15 +1403,18 @@ class GSCTradingData:
     trading_pokemon_pos = 0x15
     trading_pokemon_ot_pos = 0x135
     trading_pokemon_nickname_pos = 0x177
-    trading_pokemon_mail_pos = 0
-    trading_pokemon_mail_sender_pos = 0xC6
     
     trading_pokemon_length = 0x30
     trading_name_length = 0xB
-    trading_mail_length = 0x21
+    trading_mail_length = 0x41 # 0x21
+    trading_mail_length_old = 0x21
     trading_mail_sender_length = 0xE
+
+    trading_pokemon_mail_pos = 0
+    trading_pokemon_mail_sender_pos = trading_mail_length * 6
+    trading_pokemon_mail_sender_old_pos = trading_mail_length_old * 6
     
-    def __init__(self, data_pokemon, data_mail=None, do_full=True):
+    def __init__(self, data_pokemon, data_mail=None, do_full=True, is_new_mail_data = True):
         self.utils_class = self.get_utils_class()
 
         # For debugging purposes
@@ -910,9 +1439,13 @@ class GSCTradingData:
                 self.pokemon += [self.mon_generator(data_pokemon, self.trading_pokemon_pos + i * self.trading_pokemon_length)]
                 self.pokemon[i].add_ot_name(data_pokemon, self.trading_pokemon_ot_pos + i * self.trading_name_length)
                 self.pokemon[i].add_nickname(data_pokemon, self.trading_pokemon_nickname_pos + i * self.trading_name_length)
-                if data_mail is not None and self.pokemon[i].has_mail():
-                    self.pokemon[i].add_mail(data_mail, self.trading_pokemon_mail_pos + i * self.trading_mail_length)
-                    self.pokemon[i].add_mail_sender(data_mail, self.trading_pokemon_mail_sender_pos + i * self.trading_mail_sender_length)
+                if (data_mail is not None) and self.pokemon[i].has_mail():
+                    if is_new_mail_data:
+                        self.pokemon[i].add_mail(data_mail, self.trading_pokemon_mail_pos + i * self.trading_mail_length, is_new_mail_data = is_new_mail_data)
+                        self.pokemon[i].add_mail_sender(data_mail, self.trading_pokemon_mail_sender_pos + i * self.trading_mail_sender_length)
+                    else:
+                        self.pokemon[i].add_mail(data_mail, self.trading_pokemon_mail_pos + i * self.trading_mail_length_old, is_new_mail_data = is_new_mail_data)
+                        self.pokemon[i].add_mail_sender(data_mail, self.trading_pokemon_mail_sender_old_pos + i * self.trading_mail_sender_length)
     
     def mon_generator(self, data, pos):
         return self.mon_generator_class()(data, pos)
@@ -978,13 +1511,16 @@ class GSCTradingData:
             mail_owned |= self.mon_has_mail(i)
         return mail_owned
     
-    def evolution_procedure(self, pos, evolution):
+    def evolution_procedure(self, pos, evolution, language):
         """
         Procedure which actually evolves the Pokémon in the data.
         """
-        if not self.pokemon[pos].is_nicknamed():
-            self.pokemon[pos].add_nickname(self.utils_class.pokemon_names[evolution], 0)
+        reset_name = False
+        if not self.pokemon[pos].is_nicknamed(language):
+            reset_name = True
         self.pokemon[pos].set_species(evolution)
+        if reset_name:
+            self.pokemon[pos].set_default_nickname(language)
         self.party_info.set_id(pos, self.pokemon[pos].get_species())
         self.pokemon[pos].update_stats()
 
@@ -1048,6 +1584,25 @@ class GSCTradingData:
         Gets which pokémon were traded.
         """
         return [self.pokemon[self.get_last_mon_index()].get_species(), other.pokemon[other.get_last_mon_index()].get_species()]
+
+    def patch_out_bad_chars_for_language_buffered_only_player(self, other_language, target_language, checks):
+        from .text_conversions import PokemonNamesForGen
+        if target_language is None:
+            return
+        if other_language is None:
+            return
+
+        if (target_language == PokemonNamesForGen.KOREAN_LANGUAGE) and (other_language == PokemonNamesForGen.JAPANESE_LANGUAGE):
+            self.utils_class.patch_out_bad_chars_protect_korean_from_jpn_buffered_only(self.utils_class, self.trader)
+
+        if (target_language != PokemonNamesForGen.KOREAN_LANGUAGE) and (other_language == PokemonNamesForGen.KOREAN_LANGUAGE):
+            self.utils_class.patch_out_bad_chars_protect_international_from_korean_buffered_only(self.utils_class, self.trader)
+
+    def patch_out_bad_chars_for_language_buffered_only(self, other_language, target_language):
+        checks = self.utils_class.get_basic_checks()
+        self.patch_out_bad_chars_for_language_buffered_only_player(other_language, target_language, checks)
+        for i in range(self.get_party_size()):
+            self.pokemon[i].patch_out_bad_chars_for_language_buffered_only(target_language, checks, self.is_mon_egg(i))
     
     def trade_mon(self, other, own_index, other_index, checks):
         """
@@ -1056,9 +1611,16 @@ class GSCTradingData:
         # Prepare checks
         checks.reset_species_item_list()
         checks.set_single_team_size()
-        checks.prepare_text_buffer()
+        checks.reset_text_buffers()
         checks.prepare_patch_sets_buffer()
         checks.prepare_species_buffer()
+
+        # Account for mail shenanigans
+        if self.mon_has_mail(own_index):
+            from .text_conversions import PokemonNamesForGen
+            # Avoid patching a new newline and end of line in a converted korean mail...
+            if self.pokemon[own_index].mail.get_mail_language() == PokemonNamesForGen.KOREAN_LANGUAGE:
+                checks.do_mail_newline_checks = False
         
         # Apply checks
         own_id = checks.species_cleaner(self.party_info.get_id(own_index))
@@ -1074,6 +1636,10 @@ class GSCTradingData:
         checks.team_size = self.get_party_size()
         self.party_info.set_id(self.get_last_mon_index(), other.party_info.get_id(other.get_last_mon_index()))
         other.party_info.set_id(other.get_last_mon_index(), own_id)
+        if not self.is_mon_egg(self.get_last_mon_index()):
+            self.pokemon[self.get_last_mon_index()].set_friendship()
+        if not other.is_mon_egg(other.get_last_mon_index()):
+            other.pokemon[other.get_last_mon_index()].set_friendship()
     
     @check_pos_validity
     def reorder_party(self, traded_pos):
@@ -1088,14 +1654,17 @@ class GSCTradingData:
         self.party_info.set_id(self.get_last_mon_index(), pa_info)
         self.pokemon[self.get_last_mon_index()] = po_data
 
-    def create_trading_data(self, lengths):
+    def create_trading_data(self, lengths, is_new_mail_data = True):
         """
         Creates the data which can be loaded to the hardware.
         """
         data = []
         for i in range(3):
             data += [lengths[i]*[0]]
-        data += [self.utils_class.no_mail_section[:len(self.utils_class.no_mail_section)]]
+        if is_new_mail_data:
+            data += [self.utils_class.no_mail_section[:len(self.utils_class.no_mail_section)]]
+        else:
+            data += [self.utils_class.no_mail_section_old[:len(self.utils_class.no_mail_section_old)]]
         GSCUtilsMisc.copy_to_data(data[1], self.trader_name_pos, self.trader.values, self.trading_name_length)
         data[1][self.trading_party_info_pos] = self.get_party_size()
         GSCUtilsMisc.copy_to_data(data[1], self.trading_party_info_pos + 1, self.party_info.actual_mons)
@@ -1107,10 +1676,15 @@ class GSCTradingData:
             GSCUtilsMisc.copy_to_data(data[1], self.trading_pokemon_ot_pos + (i * self.trading_name_length), self.pokemon[i].ot_name.values, self.trading_name_length)
             GSCUtilsMisc.copy_to_data(data[1], self.trading_pokemon_nickname_pos + (i * self.trading_name_length), self.pokemon[i].nickname.values, self.trading_name_length)
             if self.pokemon[i].mail is not None:
-                GSCUtilsMisc.copy_to_data(data[3], self.trading_pokemon_mail_pos + (i * self.trading_mail_length), self.pokemon[i].mail.values)
-                GSCUtilsMisc.copy_to_data(data[3], self.trading_pokemon_mail_sender_pos + (i * self.trading_mail_sender_length), self.pokemon[i].mail_sender.values, self.trading_mail_sender_length)
+                real_tml = self.trading_mail_length_old
+                real_tpmsp = self.trading_pokemon_mail_sender_old_pos
+                if is_new_mail_data:
+                    real_tml = self.trading_mail_length
+                    real_tpmsp = self.trading_pokemon_mail_sender_pos
+                GSCUtilsMisc.copy_to_data(data[3], self.trading_pokemon_mail_pos + (i * real_tml), self.pokemon[i].mail.get_data_mail(is_new_mail_data = is_new_mail_data))
+                GSCUtilsMisc.copy_to_data(data[3], real_tpmsp + (i * self.trading_mail_sender_length), self.pokemon[i].mail.get_data_mail_sender(), self.trading_mail_sender_length)
         self.utils_class.create_patches_data(data[1], data[2], self.utils_class)
-        self.utils_class.create_patches_data(data[3], data[3], self.utils_class, is_mail=True)
+        self.utils_class.create_patches_data(data[3], data[3], self.utils_class, is_mail=True, is_old_mail_data = not is_new_mail_data)
         return data
     
 class GSCChecks:
@@ -1125,11 +1699,14 @@ class GSCChecks:
     bad_ids_pokemon_path = "bad_ids_pokemon.bin"
     bad_ids_text_path = "bad_ids_text.bin"
     checks_map_path = "checks_map.bin"
+    checks_map_old_path = "checks_map_old.bin"
     single_pokemon_checks_map_path = "single_pokemon_checks_map.bin"
+    single_pokemon_checks_map_old_path = "single_pokemon_checks_map_old.bin"
     moves_checks_map_path = "moves_checks_map.bin"
     pokemon_patch_set_0_path = "pokemon_patch_set_0.bin"
     pokemon_patch_set_1_path = "pokemon_patch_set_1.bin"
     mail_patch_set_path = "mail_patch_set.bin"
+    mail_patch_set_old_path = "mail_patch_set_old.bin"
     japanese_mail_patch_set_path = "japanese_mail_patch_set.bin"
     
     curr_exp_pos_masks = [0, 0xFF0000, 0xFFFF00]
@@ -1139,12 +1716,32 @@ class GSCChecks:
     no_conversion_patch = 0
     end_of_patch = 0xFF
     patch_set_cover = 0xFC
+    trainer_name_id = 0x5D # Needed by Korean, which doesn't support this character
     tackle_id = 0x21
     rattata_id = 0x13
     question_mark = 0xE6
+    question_mark_kor = [0x0B, 0x67]
     newline = 0x4E
+    newline_kor = 0x59
+    mail_replaced_fe = 0x21
+    mail_replaced_fe_kor = 0x51
+    max_mail_line_length = 16
+    reference_gen = 2
+    mail_text_null = 0
     
-    def __init__(self, section_sizes, do_sanity_checks):
+    def __init__(self, section_sizes, do_sanity_checks, language = None, set_default_nickname = False, set_default_ot = False, set_default_partner = False, do_profanity_checks = False, use_strict_language_checks = False, section_sizes_old = None, use_strict_language_checks_mail = False):
+        if language is None:
+            from .text_conversions import PokemonNamesForGen
+            language = PokemonNamesForGen.ENGLISH_LANGUAGE
+        self.language = language
+        self.set_default_nickname = set_default_nickname
+        self.set_default_ot = set_default_ot
+        self.set_default_partner = set_default_partner
+        self.do_profanity_checks = do_profanity_checks
+        self.use_strict_language_checks = use_strict_language_checks
+        self.use_strict_language_checks_mail = use_strict_language_checks_mail
+        self.do_mail_newline_checks = True
+
         self.utils_class = self.get_utils_class()
         self.do_sanity_checks = do_sanity_checks
         self.bad_ids_items = GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.bad_ids_items_path)))
@@ -1153,6 +1750,7 @@ class GSCChecks:
         self.bad_ids_text = GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.bad_ids_text_path)))
         self.pokemon_patch_sets = [GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.pokemon_patch_set_0_path))), GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.pokemon_patch_set_1_path)))]
         self.mail_patch_set = [GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.mail_patch_set_path)))]
+        self.mail_patch_set_old = [GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.mail_patch_set_old_path)))]
         self.japanese_mail_patch_set = [GSCUtilsLoaders.prepare_check_list(GSCUtilsMisc.read_data(self.get_path(self.mail_patch_set_path)))]
         self.check_functions = [
             self.clean_nothing,
@@ -1180,10 +1778,32 @@ class GSCChecks:
             self.clean_mail_same_species,
             self.clean_pokemon_patch_set,
             self.clean_mail_patch_set,
-            self.clean_japanese_mail_patch_set
+            self.clean_japanese_mail_patch_set,
+            self.clean_text_partner,
+            self.clean_text_partner_maybe_final,
+            self.clean_text_nickname,
+            self.clean_text_nickname_final,
+            self.clean_text_ot,
+            self.clean_text_ot_maybe_final,
+            self.clean_text_partner_final,
+            self.clean_text_ot_final,
+            self.clean_text_ot_maybe_final_no_end,
+            self.clean_text_mail,
+            self.clean_text_mail_check_newline_int,
+            self.clean_text_mail_check_newline_kor_final_int,
+            self.clean_text_mail_final,
+            self.clean_text_nickname_special_char_check,
+            self.clean_text_ot_special_char_check,
+            self.clean_text_partner_special_char_check,
+            self.clean_text_ot_final_no_end,
+            self.clean_text_ot_mail_start,
             ]
         self.checks_map = self.prepare_checks_map(GSCUtilsMisc.read_data(self.get_path(self.checks_map_path)), section_sizes, self.check_functions)
+        if section_sizes_old is None:
+            section_sizes_old = section_sizes
+        self.checks_map_old = self.prepare_checks_map(GSCUtilsMisc.read_data(self.get_path(self.checks_map_old_path)), section_sizes_old, self.check_functions)
         self.single_pokemon_checks_map = GSCUtilsLoaders.prepare_functions_map(GSCUtilsMisc.read_data(self.get_path(self.single_pokemon_checks_map_path)), self.check_functions)
+        self.single_pokemon_checks_map_old = GSCUtilsLoaders.prepare_functions_map(GSCUtilsMisc.read_data(self.get_path(self.single_pokemon_checks_map_old_path)), self.check_functions)
         self.moves_checks_map = GSCUtilsLoaders.prepare_functions_map(GSCUtilsMisc.read_data(self.get_path(self.moves_checks_map_path)), self.check_functions)
         self.species_cleaner = self.clean_species_sp
     
@@ -1212,19 +1832,46 @@ class GSCChecks:
         return wrapper
     
     def apply_checks_to_data(self, checker, data):
-        new_data = list(data)
+        new_data = []
         for j in range(len(checker)):
-            new_data[j] = checker[j](data[j])
+            checked_value = checker[j](data[j])
+            if not isinstance(checked_value, list):
+                checked_value = [checked_value]
+            new_data += checked_value
         return new_data
 
     def prepare_text_buffer(self):
         self.curr_text = []
+        self.last_text_converted = ""
+        self.is_bad_text_redeemable = False
+        self.last_considered_char = None
+        self.is_curr_text_two_bytes = None
+        self.last_two_bytes_error = False
+        self.force_default_name = False
+        self.force_next_eol = False
+        self.is_mail = False
+        self.is_mail_ot = False
+        self.do_special_chars_check = False
+        self.is_korean_special = False
+        self.is_patched_for_korean_special = False
+        self.special_chars_list = []
+        self.is_korean_special_was_japanese_truncated = False
         
     def reset_species_item_list(self):
         self.species_list = []
         self.species_list_size = 0
         self.item_list = []
-        
+
+    def reset_text_buffers(self):
+        self.prepare_text_buffer()
+        self.has_encountered_eol = False
+        self.has_encountered_newline = False
+        self.curr_species_nickname = 0
+        self.last_species_nickname = -1
+        self.curr_species_ot = 0
+        self.last_species_ot = -1
+        self.do_mail_newline_checks = True
+
     def set_single_team_size(self):
         self.team_size = 1
         
@@ -1272,8 +1919,7 @@ class GSCChecks:
         val = (self.exp >> (8 * (2 - self.curr_exp_pos))) & 0xFF
         self.curr_exp_pos += 1
         return val
-    
-    @clean_check_sanity_checks
+
     def clean_team_size(self, team_size):
         self.team_size = self.clean_value(team_size, self.is_team_size_valid, 1)
         return self.team_size
@@ -1329,24 +1975,31 @@ class GSCChecks:
         self.curr_exp_id = 0
         self.curr_stat_exp_pos = 0
         return self.curr_species
-    
-    @clean_check_sanity_checks
+
+    def get_species_is_egg(self, species):
+        return species == self.utils_class.egg_id
+
     def clean_species_sp(self, species):
         if species == self.free_value_species or self.species_list_size >= self.team_size:
             self.add_to_species_list(self.free_value_species)
             self.curr_species_pos += 1
-            return self.free_value_species
+            if self.do_sanity_checks:
+                return self.free_value_species
+            return species
         found_species = self.clean_value(species, self.is_species_valid, self.rattata_id)
-        if species == self.utils_class.egg_id:
+        if self.get_species_is_egg(species):
             found_species = species
         self.add_to_species_list(found_species)
         self.curr_species_pos += 1
-        return found_species
-    
-    @clean_check_sanity_checks
+        if self.do_sanity_checks:
+            return found_species
+        return species
+
     def clean_species_force_terminate(self, species):
         self.prepare_species_buffer()
-        return self.free_value_species
+        if self.do_sanity_checks:
+            return self.free_value_species
+        return species
     
     @clean_check_sanity_checks
     def load_stat_exp(self, val):
@@ -1380,32 +2033,325 @@ class GSCChecks:
     @clean_check_sanity_checks
     def clean_mail_item(self, item):
         return self.item_list[self.curr_species_pos-1]
-    
+
     @clean_check_sanity_checks
+    def clean_char_eol(self, char):
+        # Allow whatever as long as it is after EOL
+        char_val = char
+        if not self.has_encountered_eol:
+            char_val = self.utils_class.end_of_line
+            self.has_encountered_eol = True
+        return char_val
+
     def clean_text(self, char):
-        char_val = self.clean_value(char, self.is_char_valid, self.question_mark)
+        from .text_conversions import PokemonNamesForGen
+        # Do runtime conversions for improved compatibility between versions
+        if self.do_special_chars_check:
+            # Only do them if needed...
+            if (char == self.utils_class.korean_special_replacement) and (self.language == PokemonNamesForGen.KOREAN_LANGUAGE):
+                self.is_korean_special = True
+                return []
+            if (char == self.utils_class.korean_patched_special_replacement) and (self.language != PokemonNamesForGen.KOREAN_LANGUAGE):
+                self.is_patched_for_korean_special = True
+                return []
+        char_val = self.clean_text_value(char, self.is_char_valid)
         self.curr_text += [char_val]
+        if self.last_considered_char is None:
+            self.last_text_converted = PokemonNamesForGen.convert_generic_name_general_for_gen(self.curr_text, self.reference_gen, language=self.language)
         # Possibility to put bad words filters here
         return char_val
-    
-    @clean_check_sanity_checks
+
     def clean_text_final(self, char):
-        char_val = self.utils_class.end_of_line
+        char_val = self.clean_char_eol(char)
         self.curr_text += [char_val]
         # Possibility to put bad words filters here
         self.prepare_text_buffer()
         return char_val
-    
+
+    def get_char_check_if_bad_text_redeemable(self, char, method_get):
+        from .text_conversions import PokemonTextConversions
+        if (not self.is_bad_text_redeemable) or self.has_encountered_eol or (not self.do_profanity_checks):
+            return char
+
+        to_check_text = self.last_text_converted.lower()
+        words_redeemable = method_get(self.last_text_converted, self.language, self.is_curr_text_two_bytes)
+        possible_continuations = set()
+
+        if to_check_text in words_redeemable:
+            possible_continuations.add('\0')
+
+        for word in words_redeemable:
+            if word != to_check_text:
+                if self.last_text_converted.isupper():
+                    word = word.upper()
+                possible_continuations.add(word[len(self.last_text_converted)])
+
+        converted_possible_continuations = []
+        for possible_char in possible_continuations:
+            converted_char = PokemonTextConversions.convert_char_to_genx_char(possible_char, self.reference_gen, self.language, do_two_bytes_only = self.is_curr_text_two_bytes)
+            if (len(converted_char) == 1) and self.is_curr_text_two_bytes and (self.last_considered_char is not None):
+                continue
+            if self.is_curr_text_two_bytes and (self.last_considered_char is not None) and (self.last_considered_char != converted_char[0]):
+                continue
+            if self.last_considered_char is not None:
+                converted_possible_continuations += [converted_char[1]]
+            else:
+                converted_possible_continuations += [converted_char[0]]
+
+        # Default to the first one...
+        if char not in converted_possible_continuations:
+            char = self.utils_class.end_of_line
+            # HOW COULD THIS NOT HAPPEN?!
+            if len(converted_possible_continuations) > 0:
+                char = converted_possible_continuations[0]
+
+        return char
+
+    def get_char_check_if_bad_text(self, char, method_is, method_get, max_name_len):
+        from .text_conversions import PokemonNamesForGen, PokemonBadWordsFilter
+        char = self.get_char_check_if_bad_text_redeemable(char, method_get)
+
+        if (len(self.last_text_converted) <= 0) or (self.is_curr_text_two_bytes and (self.last_considered_char is None)) or self.has_encountered_eol or (not self.do_profanity_checks):
+            return char
+
+        next_text = PokemonNamesForGen.convert_generic_name_general_for_gen(self.curr_text + [char], self.reference_gen, language=self.language)
+        if not PokemonBadWordsFilter.is_bad_word(next_text):
+            return char
+
+        # Avoid temporary false positives that can become legal with a next character...
+        # Use max_name_len to check that one more character can be added...
+        if (char != self.utils_class.end_of_line) and (len(self.curr_text + [char]) < max_name_len) and (not PokemonBadWordsFilter.is_bad_word(next_text + "?")):
+            return char
+
+        if method_is(self.last_text_converted, self.language, self.is_curr_text_two_bytes):
+            if not self.is_bad_text_redeemable:
+                self.is_bad_text_redeemable = True
+                char = self.get_char_check_if_bad_text_redeemable(char, method_get)
+        else:
+            char = self.question_mark
+            if (self.language == PokemonNamesForGen.KOREAN_LANGUAGE) and self.is_curr_text_two_bytes: # Hard to salvage, tbh...
+                char = self.question_mark_kor[1]
+
+        return char
+
+    def handle_special_text(self, char):
+        if (not self.is_korean_special) and (not self.is_patched_for_korean_special):
+            return [char]
+
+        if char == self.utils_class.prohibited_char_replacement:
+            char = self.utils_class.prohibited_char
+        self.special_chars_list += [char]
+
+        if self.is_patched_for_korean_special:
+            return self.utils_class.apply_text_transform_protect_korean_from_jpn_special(self.utils_class, self.special_chars_list)
+
+        if self.is_korean_special:
+            return self.utils_class.apply_text_transform_protect_international_from_korean_special(self.utils_class, self.special_chars_list, self)
+
+        return [char]
+
+    def process_and_clean_replacable_text(self, actual_char, do_name_replacement, replacement_name, method_is, method_get, max_name_len):
+        curr_pos = len(self.curr_text)
+        if do_name_replacement:
+            if curr_pos < len(replacement_name):
+                actual_char = replacement_name[curr_pos]
+            else:
+                actual_char = self.utils_class.end_of_line
+
+        actual_char = self.get_char_check_if_bad_text(actual_char, method_is, method_get, max_name_len)
+
+        return self.clean_text(actual_char)
+
+    def process_and_clean_replacable_text_mon(self, actual_char, do_name_replacement, replacement_name):
+        from .text_conversions import PokemonNamesForGen, PokemonBadWordsFilter
+        return self.process_and_clean_replacable_text(actual_char, do_name_replacement, replacement_name, PokemonBadWordsFilter.get_is_root_whitelisted_of_mon_name, PokemonBadWordsFilter.get_root_whitelisted_words_of_mon_name, PokemonNamesForGen.get_pokemon_max_nickname_length(self.reference_gen, self.language))
+
+    def process_and_clean_replacable_text_ot(self, actual_char, do_name_replacement, replacement_name):
+        from .text_conversions import PokemonNamesForGen, PokemonBadWordsFilter
+        return self.process_and_clean_replacable_text(actual_char, do_name_replacement, replacement_name, PokemonBadWordsFilter.get_is_root_whitelisted_of_ot_name, PokemonBadWordsFilter.get_root_whitelisted_words_of_ot_name, PokemonNamesForGen.get_trainer_max_name_length(self.reference_gen, self.language))
+
+    def clean_text_partner(self, char, set_check_for_special_chars = False):
+        from .text_conversions import PokemonNamesForGen
+        trainer_name = PokemonNamesForGen.get_trainer_name_for_gen(self.reference_gen, language=self.language)
+
+        self.do_special_chars_check = set_check_for_special_chars
+        chars_to_process = self.handle_special_text(char)
+        out_values = []
+
+        for i in range(len(chars_to_process)):
+            do_name_replacement = self.set_default_partner or self.force_default_name
+            out_values += [self.process_and_clean_replacable_text_ot(chars_to_process[i], do_name_replacement, trainer_name)]
+
+        if len(chars_to_process) == 1:
+            return out_values[0]
+        return out_values
+
+    def clean_text_partner_special_char_check(self, char):
+        return self.clean_text_partner(char, set_check_for_special_chars = True)
+
+    def clean_text_partner_maybe_final(self, char):
+        if not self.is_curr_text_two_bytes:
+            return self.clean_text_partner_final(char)
+        return self.clean_text_partner(char)
+
+    def clean_text_partner_final(self, char):
+        return self.clean_text_final(char)
+
+    def clean_text_nickname(self, char, set_check_for_special_chars = False):
+        from .text_conversions import PokemonNamesForGen
+        self.last_species_nickname = self.curr_species_nickname
+        mon_species = self.species_list[self.curr_species_nickname]
+        is_an_egg = self.is_egg(self.curr_species_nickname)
+        pokemon_name = None
+        if (mon_species != self.free_value_species) and (mon_species != self.empty_value_species):
+            if is_an_egg:
+                pokemon_name = PokemonNamesForGen.get_egg_name_for_gen(self.reference_gen, language=self.language)
+            else:
+                pokemon_name = PokemonNamesForGen.get_pokemon_name_for_gen(mon_species, self.reference_gen, language=self.language)
+
+        self.do_special_chars_check = set_check_for_special_chars
+        chars_to_process = self.handle_special_text(char)
+        out_values = []
+        #print(chars_to_process)
+
+        for i in range(len(chars_to_process)):
+            do_name_replacement = (mon_species != self.free_value_species) and (mon_species != self.empty_value_species) and (pokemon_name is not None) and ((is_an_egg and self.do_sanity_checks) or self.set_default_nickname or self.force_default_name)
+            out_values += [self.process_and_clean_replacable_text_mon(chars_to_process[i], do_name_replacement, pokemon_name)]
+
+        if len(chars_to_process) == 1:
+            return out_values[0]
+        return out_values
+
+    def clean_text_nickname_special_char_check(self, char):
+        return self.clean_text_nickname(char, set_check_for_special_chars = True)
+
+    def clean_text_nickname_final(self, char):
+        if self.last_species_nickname == self.curr_species_nickname:
+            self.curr_species_nickname += 1
+        return self.clean_text_final(char)
+
+    def clean_text_ot(self, char, set_check_for_special_chars = False):
+        from .text_conversions import PokemonNamesForGen
+        self.last_species_ot = self.curr_species_ot
+        trainer_name = PokemonNamesForGen.get_trainer_name_for_gen(self.reference_gen, language=self.language)
+
+        self.do_special_chars_check = set_check_for_special_chars
+        chars_to_process = self.handle_special_text(char)
+        out_values = []
+        #print(chars_to_process)
+
+        for i in range(len(chars_to_process)):
+            # Extra check compared to trade/battle partner...
+            if (chars_to_process[i] == self.trainer_name_id) and (len(self.curr_text) == 0):
+                # "TRAINER" does not exist as a character in Korean
+                from .text_conversions import PokemonNamesForGen
+                if (self.language == PokemonNamesForGen.KOREAN_LANGUAGE) and self.do_sanity_checks:
+                    self.force_default_name = True
+
+            do_name_replacement = self.set_default_partner or self.force_default_name
+            out_values += [self.process_and_clean_replacable_text_ot(chars_to_process[i], do_name_replacement, trainer_name)]
+
+        if len(chars_to_process) == 1:
+            return out_values[0]
+        return out_values
+
+    def clean_text_ot_mail_start(self, char):
+        self.is_mail_ot = True
+        return self.clean_text_ot(char)
+
+    def clean_text_ot_special_char_check(self, char):
+        return self.clean_text_ot(char, set_check_for_special_chars = True)
+
+    def clean_text_ot_maybe_final(self, char):
+        if not self.is_curr_text_two_bytes:
+            return self.clean_text_ot_final(char)
+        return self.clean_text_ot(char)
+
+    def clean_text_ot_final(self, char):
+        if self.last_species_ot == self.curr_species_ot:
+            self.curr_species_ot += 1
+        return self.clean_text_final(char)
+
+    def clean_text_ot_final_no_end(self, char):
+        # Needed for Japanese OTs
+        if self.last_species_ot == self.curr_species_ot:
+            self.curr_species_ot += 1
+        return self.clean_text_final_no_end(char)
+
+    def clean_text_ot_maybe_final_no_end(self, char):
+        # Needed for Korean Mail OTs
+        if not self.is_curr_text_two_bytes:
+            return self.clean_text_ot_final(char)
+        if self.last_species_ot == self.curr_species_ot:
+            self.curr_species_ot += 1
+        return self.clean_text_final_no_end(char)
+
     @clean_check_sanity_checks
+    def check_mail_char_eol_newline(self, char):
+        from .text_conversions import PokemonNamesForGen
+        if (len(self.curr_text) == 0) or self.has_encountered_eol or (not self.do_mail_newline_checks):
+            return char
+        lines_to_process = self.utils_class.get_general_string_ready_for_counting_lines_and_chars(self.last_text_converted)
+        num_chars_currline = len(lines_to_process[-1])
+        num_lines = len(lines_to_process)
+        if num_chars_currline >= self.max_mail_line_length:
+            if num_lines == 1:
+                if self.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+                    char = self.newline_kor
+                else:
+                    char = self.newline
+            else:
+                char = self.utils_class.end_of_line
+        return char
+
+    def clean_text_mail(self, char):
+        from .text_conversions import PokemonNamesForGen
+        # Mails allow different characters...
+        self.is_mail = True
+        char = self.check_mail_char_eol_newline(char)
+        added_newline = False
+        # Korean mail MUST be two bytes long...
+        # Otherwise bad stuff happens...
+        #if self.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+        #    self.is_curr_text_two_bytes = True
+        if (self.language == PokemonNamesForGen.KOREAN_LANGUAGE) and (not self.has_encountered_newline) and (char == self.utils_class.end_of_line) and self.do_sanity_checks and self.do_mail_newline_checks:
+            char = self.newline_kor
+            added_newline = True
+        out_val = self.clean_text(char)
+        if added_newline:
+            self.force_next_eol = True
+        return out_val
+
+    # Ensures a newline is present at the fixed position.
+    # For most mails, this sets the newline. Even if they end
+    # early. For the KENYA mail, it won't (as expected).
+    def clean_text_mail_check_newline_int(self, char):
+        from .text_conversions import PokemonNamesForGen
+        if (self.language != PokemonNamesForGen.KOREAN_LANGUAGE) and (not self.has_encountered_newline) and self.do_sanity_checks:
+            char = self.newline
+        return self.clean_text_mail(char)
+
+    def clean_text_mail_check_newline_kor_final_int(self, char):
+        from .text_conversions import PokemonNamesForGen
+        if self.language != PokemonNamesForGen.KOREAN_LANGUAGE:
+            return self.clean_text_mail_final(char)
+        if (not self.has_encountered_newline) and self.do_sanity_checks:
+            char = self.newline_kor
+        return self.clean_text_mail(char)
+
+    def clean_text_mail_final(self, char):
+        self.is_mail = True
+        char = self.check_mail_char_eol_newline(char)
+        return self.clean_text_final_no_end(char)
+
     def clean_text_newline(self, char):
         char_val = self.newline
         self.curr_text += [char_val]
         # Possibility to put bad words filters here
         return char_val
-    
-    @clean_check_sanity_checks
+
     def clean_text_final_no_end(self, char):
-        char_val = self.clean_value(char, self.is_char_valid, self.question_mark)
+        char_val = self.clean_text_value(char, self.is_char_valid)
         self.curr_text += [char_val]
         # Possibility to put bad words filters here
         self.prepare_text_buffer()
@@ -1441,9 +2387,9 @@ class GSCChecks:
             self.curr_stat_id += 1
             self.curr_pos = 0
         return val
-    
-    def is_egg(self):
-        if self.species_list[self.curr_species_pos-1] == self.utils_class.egg_id:
+
+    def is_egg(self, index):
+        if self.species_list[index] == self.utils_class.egg_id:
             return True
         return False
     
@@ -1453,7 +2399,7 @@ class GSCChecks:
         max_zero = False
         if self.curr_hp == 0:
             start_zero = True
-            max_zero = self.is_egg()
+            max_zero = self.is_egg(self.curr_species_pos-1)
         val = self.check_stat(val, zero_min=start_zero, zero_max=max_zero)
         if self.curr_pos == 0:
             if self.curr_hp == 0:
@@ -1497,6 +2443,76 @@ class GSCChecks:
         if checker(value):
             return value
         return default_value
+
+    @clean_check_sanity_checks
+    def clean_text_value(self, value, checker):
+        from .text_conversions import PokemonNamesForGen
+        if self.force_next_eol:
+            self.force_next_eol = False
+            value = self.utils_class.end_of_line
+
+        was_last_partial = self.last_considered_char is not None
+
+        # Apply changes as Korean has a couple of extra non-valid characters
+        # that are valid in Japanese...
+        dict_to_replace_bad_chars = self.utils_class.bad_ids_text_special_to_kor
+        if self.language == PokemonNamesForGen.JAPANESE_LANGUAGE:
+            dict_to_replace_bad_chars = self.utils_class.bad_ids_text_special_from_kor
+        # Avoid getting the second byte of Korean chars caught in this, though.
+        if (not was_last_partial) and (value in dict_to_replace_bad_chars.keys()) and (not self.has_encountered_eol):
+            value = dict_to_replace_bad_chars[value]
+
+        if checker(value):
+            return value
+
+        if self.is_mail:
+            if (value == self.mail_text_null) and (not self.is_curr_text_two_bytes):
+                return self.mail_text_null
+            if (((value == self.newline) and (not self.is_curr_text_two_bytes)) or (value == self.newline_kor)) and (not self.has_encountered_newline):
+                self.has_encountered_newline = True
+                self.last_two_bytes_error = False
+                if self.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+                    if self.is_curr_text_two_bytes is None:
+                        self.is_curr_text_two_bytes = True
+                    return self.newline_kor
+                return self.newline
+            # We only end up here in case of an error...
+            # Also works well as error handling if bad data
+            # is thrown at this...
+            if self.language != PokemonNamesForGen.JAPANESE_LANGUAGE:
+                if (value == self.mail_replaced_fe) or (value == self.mail_replaced_fe_kor):
+                    if self.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+                        return self.mail_replaced_fe_kor
+                    return self.mail_replaced_fe
+
+        # Error handling - One byte
+        if not self.is_curr_text_two_bytes:
+            return self.question_mark
+
+        # Error handling - Two bytes
+        bytes_out = None
+        index_out = 0
+
+        if self.language == PokemonNamesForGen.KOREAN_LANGUAGE:
+            bytes_out = self.question_mark_kor
+
+        # How?!
+        if bytes_out is None:
+            return self.question_mark
+
+        if was_last_partial:
+            # This may produce unexpected characters in some error cases,
+            # however there is no way to change an "already transmitted byte",
+            # so this will have to do...
+            # At least it won't display garbage...
+            index_out = 1
+            self.last_considered_char = None
+        else:
+            index_out = 0
+            # Needed to ensure the next one selected will be the "other byte"
+            self.last_considered_char = bytes_out[index_out]
+
+        return bytes_out[index_out]
     
     @valid_check_sanity_checks
     def is_team_size_valid(self, team_size):
@@ -1515,7 +2531,86 @@ class GSCChecks:
     @valid_check_sanity_checks
     def is_species_valid(self, species):
         return not GSCUtilsMisc.check_normal_list(self.bad_ids_pokemon, species)
+
+    def convert_char_to_general(self, char):
+        from .text_conversions import PokemonTextConversions
+        out_value, is_partial, is_question_mark = PokemonTextConversions.convert_genx_char_to_char(char, self.reference_gen, self.language, last_char = self.last_considered_char)
+        self.last_considered_char = None
+        if is_partial:
+            self.last_considered_char = char
+        # Specially handle "\n" elsewhere...
+        # If it even is allowed...
+        if out_value == "\n":
+            return "?", False, True
+        return out_value, is_partial, is_question_mark
     
     @valid_check_sanity_checks
     def is_char_valid(self, char):
-        return not GSCUtilsMisc.check_normal_list(self.bad_ids_text, char)
+        curr_text_len = len(self.curr_text)
+        if curr_text_len == 0:
+            self.has_encountered_eol = False
+            self.has_encountered_newline = False
+
+        # Handle error protracting across two bytes
+        if self.last_two_bytes_error:
+            self.last_considered_char = None
+            self.last_two_bytes_error = False
+            return False
+
+        # EOL is always allowed (provided it's not in a two-bytes setup)
+        was_last_partial = self.last_considered_char is not None
+        if (not was_last_partial) and (char == self.utils_class.end_of_line):
+            # Prevent 0 length names...
+            if (curr_text_len == 0) and (not self.is_mail):
+                self.force_next_eol = True
+                return False
+            self.has_encountered_eol = True
+            return True
+
+        # After EOL, allow whatever...?
+        if self.has_encountered_eol:
+            # Ensure mail code can process the newline
+            if self.is_mail and (not self.has_encountered_newline) and ((char == self.newline) or (char == self.newline_kor)):
+                return False
+            return True
+
+        from .text_conversions import PokemonNamesForGen
+        # Do this here, and keep the char as is elsewhere...
+        # Make sure it matches with the language...
+        # So elsewhere it can be fixed in case of mismatch...
+        if self.is_mail and (self.language != PokemonNamesForGen.JAPANESE_LANGUAGE) and (((self.language != PokemonNamesForGen.KOREAN_LANGUAGE) and (char == self.mail_replaced_fe)) or ((self.language == PokemonNamesForGen.KOREAN_LANGUAGE) and (char == self.mail_replaced_fe_kor))):
+            char = 0xFE
+
+        # Do the actual conversion
+        out_value, is_partial, is_question_mark = self.convert_char_to_general(char)
+
+        if (char == self.trainer_name_id) and (curr_text_len == 0):
+            # Prints TRAINER in all languages but Korean...
+            # However it must be the first character, and followed by an EOL
+            self.force_next_eol = True
+            return True
+
+        # Text is either fully two-bytes or fully single-bytes.
+        # No mixing the two...
+        if self.is_curr_text_two_bytes is None:
+            self.is_curr_text_two_bytes = is_partial
+        if (not self.is_curr_text_two_bytes) and is_partial:
+            self.last_two_bytes_error = True
+            return False
+        if self.is_curr_text_two_bytes and (not is_partial) and (not was_last_partial):
+            self.last_two_bytes_error = True
+            return False
+
+        if self.is_mail or self.is_mail_ot:
+            # Avoid getting the second byte of Korean chars caught in this, though.
+            # Mail data is special, as it technically should be checked against its own
+            # language, instead of whatever the currently set language is...
+            if (not self.use_strict_language_checks_mail) and (not was_last_partial):
+                return not GSCUtilsMisc.check_normal_list(self.bad_ids_text, char)
+        else:
+            # Avoid getting the second byte of Korean chars caught in this, though.
+            if (not self.use_strict_language_checks) and (not was_last_partial):
+                return not GSCUtilsMisc.check_normal_list(self.bad_ids_text, char)
+
+        # If there is nothing unexpected, return the value
+        return not is_question_mark

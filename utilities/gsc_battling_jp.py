@@ -28,7 +28,21 @@ class GSCBattlingJP(GSCBattling):
         end_of_gsc_data_pos + (single_text_len * 8): [pokemon_name_len_diff, end_of_line],
         end_of_gsc_data_pos + (single_text_len * 9): [pokemon_name_len_diff, end_of_line],
         end_of_gsc_data_pos + (single_text_len * 10): [pokemon_name_len_diff, end_of_line],
-        end_of_gsc_data_pos + (single_text_len * 11): [pokemon_name_len_diff, end_of_line]
+        end_of_gsc_data_pos + (single_text_len * 11): [pokemon_name_len_diff, end_of_line],
+        # Add the ones due to Korean special character handling
+        end_of_player_name_pos + 2: [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 0): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 1): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 2): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 3): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 4): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 5): [player_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 6): [pokemon_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 7): [pokemon_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 8): [pokemon_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 9): [pokemon_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 10): [pokemon_name_len_diff - 2, end_of_line],
+        end_of_gsc_data_pos + 2 + (single_text_len * 11): [pokemon_name_len_diff - 2, end_of_line],
     }, {}, {}, {}]
     drop_bytes_checks = [[0xA, 0x1B9, 0xC5], [next_section, next_section, no_input], [0,4,0]]
     

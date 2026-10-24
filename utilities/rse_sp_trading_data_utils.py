@@ -1,5 +1,6 @@
 import math
-from .gsc_trading_data_utils import GSCUtils, GSCTradingText, GSCTradingPokémonInfo, GSCTradingPartyInfo, GSCTradingData, GSCChecks, GSCUtilsMisc
+from .gsc_trading_data_utils import GSCUtils, GSCTradingText, GSCTradingPokémonInfo, GSCTradingPartyInfo, GSCTradingData, GSCChecks, GSCUtilsMisc, GSCTradingMailData
+from .text_conversions import PokemonNamesForGen
 
 class RSESPUtils(GSCUtils):
     """
@@ -10,6 +11,7 @@ class RSESPUtils(GSCUtils):
     invalid_held_items_path = "invalid_held_items.bin"
     invalid_pokemon_path = "invalid_pokemon.bin"
     abilities_path = "abilities.bin"
+    base_friendship_path = "base_friendship.bin"
     
     invalid_held_items = None
     invalid_pokemon = None
@@ -27,6 +29,7 @@ class RSESPUtils(GSCUtils):
         curr_class.invalid_held_items = GSCUtilsMisc.read_data(self.get_path(curr_class.invalid_held_items_path))
         curr_class.invalid_pokemon = GSCUtilsMisc.read_data(self.get_path(curr_class.invalid_pokemon_path))
         curr_class.abilities = GSCUtilsMisc.read_data(self.get_path(curr_class.abilities_path))
+        curr_class.base_friendship = GSCUtilsMisc.read_data(self.get_path(curr_class.base_friendship_path))
 
     def init_enc_positions(curr_class):
         curr_class.enc_positions = []
@@ -131,13 +134,53 @@ class RSESPTradingText(GSCTradingText):
     
     def get_utils_class(self):
         return RSESPUtils
+
+class RSESPTradingMailData(GSCTradingMailData):
+    """
+    Class which contains mail data from the trading data.
+    """
+
+    mail_len = 0x24
+
+    def __init__(self, data_mail = None, data_sender = None):
+        if data_mail is None:
+            data_mail = [0]
+        while len(data_mail) < self.mail_len:
+            data_mail += [0]
+        self.data_mail = RSESPTradingText(data_mail, 0, length = self.mail_len)
+        self.utils_class = self.get_utils_class()
+    
+    def get_utils_class(self):
+        return RSESPUtils
+
+    def get_data_mail(self, is_new_mail_data = True):
+        return self.data_mail.values
+
+    def get_data_mail_sender(self):
+        return None
+
+    def get_mail_language(self):
+        return None
+
+    def set_mail_language(self, new_language):
+        pass
+
+    def set_data_mail(self, data):
+        max_copy_len = min(len(self.data_mail.values), len(data))
+        for i in range(max_copy_len):
+            self.data_mail.values[i] = data[i]
+        if len(data) < len(self.data_mail.values):
+            self.data_mail.values[len(data)] = 0
+
+    def set_data_mail_sender(self, data):
+        pass
         
 class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
     """
     Class which contains information about the pokémon from the trading data.
     """
     pokemon_data_len = 0x64
-    japanese_language_id = 1
+    japanese_language_id = PokemonNamesForGen.JAPANESE_LANGUAGE
     num_unown_letters = 28
     unown_b_start = 415
     unown_species = 201
@@ -167,6 +210,7 @@ class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
     mail_len = 0x24
     version_info_len = 2
     ribbon_info_len = 11
+    reference_gen = 3
     
     all_lengths = [pokemon_data_len, mail_len, version_info_len, ribbon_info_len]
     
@@ -246,22 +290,46 @@ class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
             data += [0]
         self.ribbon_info = data[start:start+self.ribbon_info_len]
     
-    def set_default_nickname(self):
-        self.add_nickname(self.utils_class.pokemon_names[self.get_species()], 0)
+    def set_default_trainer_name(self, language = None):
+        if language is None:
+            language = self.get_language()
+        self.add_ot_name(PokemonNamesForGen.get_trainer_name_for_gen(self.reference_gen, language=language), 0)
+        self.set_language(language)
     
-    def set_egg_nickname(self):
-        self.add_nickname(self.utils_class.egg_nick, 0)
-        self.values[self.language_pos] = self.japanese_language_id
+    def set_default_nickname(self, language = None):
+        if language is None:
+            language = self.get_language()
+        self.add_nickname(PokemonNamesForGen.get_pokemon_name_for_gen(self.get_species(), self.reference_gen, language=language), 0)
+        self.set_language(language)
+
+    def get_nickname_general(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return PokemonNamesForGen.convert_generic_name_general_for_gen(self.values[self.nickname_pos:self.nickname_pos+self.nickname_len], self.reference_gen, language=self.get_language())
+
+    def get_ot_name_general(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return PokemonNamesForGen.convert_generic_name_general_for_gen(self.values[self.ot_name_pos:self.ot_name_pos+self.ot_name_len], self.reference_gen, language=self.get_language())
+    
+    def set_egg_nickname(self, language = None):
+        # Language parameter goes unused in Gen 3...
+        self.add_nickname(PokemonNamesForGen.get_egg_name_for_gen(self.reference_gen, language=self.japanese_language_id), 0)
+        self.set_language(self.japanese_language_id)
         self.values[self.use_egg_name_pos] |= 4
         self.misc[7] |= 0x40
+
+    def get_language(self):
+        return self.values[self.language_pos]
+
+    def set_language(self, language):
+        self.values[self.language_pos] = language
         
     def get_is_bad_egg(self):
         return (self.values[self.use_egg_name_pos] & 1) != 0
 
     def get_is_egg(self):
         if (self.misc[7] & 0x40) != 0:
-            return 1
-        return 0
+            return True
+        return False
 
     def encrypt_data(self):
         enc_positions = self.utils_class.enc_positions
@@ -376,6 +444,12 @@ class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
                 return 2
             return 1
         return 0
+
+    # Default = trade-based friendship
+    def set_friendship(self, val=None):
+        if val is None:
+            val = self.utils_class.base_friendship[self.get_species()]
+        self.growth[9] = val
     
     def set_hatching_cycles(self, val=0):
         self.growth[9] = val
@@ -475,6 +549,11 @@ class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
         if not self.is_valid:
             return True
         return False
+
+    def add_mail(self, data, start, is_new_mail_data = True):
+        if self.mail is None:
+            self.mail = RSESPTradingMailData()
+        self.mail.set_data_mail(data[start:start+self.mail_len])
         
     def add_mail_sender(self, data, start):
         pass
@@ -483,11 +562,16 @@ class RSESPTradingPokémonInfo(GSCTradingPokémonInfo):
         """
         Returns all the data used to represent this pokemon.
         """
-        sources = [self, self.mail]
+        # Update encrypted data before returning it...
+        # Otherwise certain changes (e.g. making the Pokémon an egg)
+        # do not get applied...
+        self.encrypt_data()
+
+        sources = [self.values, self.mail.get_data_mail()]
         data = [0] * self._precalced_lengths[len(sources)+1]
         if self.is_valid:
             for i in range(len(sources)):
-                GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[i], sources[i].values)
+                GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[i], sources[i])
             GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[len(sources)], self.version_info)
             GSCUtilsMisc.copy_to_data(data, self._precalced_lengths[len(sources)+1], self.ribbon_info)
         return data
@@ -541,6 +625,8 @@ class RSESPTradingData(GSCTradingData):
     trading_name_length = 8
     trading_mail_length = 0x24
     trading_version_info_length = 2
+
+    reference_gen = 3
     
     def __init__(self, data_pokemon, data_mail=None, do_full=True):
         super(RSESPTradingData, self).__init__(data_pokemon, data_mail=None, do_full=False)
@@ -553,6 +639,9 @@ class RSESPTradingData(GSCTradingData):
                     self.pokemon[i].add_mail(self.get_empty_mail(), 0)
                 self.pokemon[i].add_version_info(data_pokemon, self.game_id_pos + 1)
                 self.pokemon[i].add_ribbon_info(data_pokemon, self.ribbon_info_pos)
+        if data_pokemon is not None:
+            self.language = data_pokemon[self.game_id_pos]
+            self.extra_version_flags = data_pokemon[self.game_id_pos + 3]
 
     def are_checksum_valid(cls, buf, lengths):
         checksum = 0
@@ -607,6 +696,18 @@ class RSESPTradingData(GSCTradingData):
             checksum = (checksum + GSCUtilsMisc.read_int_le(buf, i*4)) & 0xFFFFFFFF
         
         GSCUtilsMisc.write_int_le(buf, lengths[0]-4, checksum)
+
+    def add_partner_name(self, data):
+        while len(data) < self.trading_name_length:
+            data += [0]
+        self.trader.values[:] = data[:]
+    
+    def set_default_partner_name(self):
+        self.add_partner_name(PokemonNamesForGen.get_trainer_name_for_gen(self.reference_gen, language=self.language))
+
+    def get_partner_name_general(self, language):
+        from .text_conversions import PokemonNamesForGen
+        return PokemonNamesForGen.convert_generic_name_general_for_gen(self.trader.values[:], self.reference_gen, language=self.language)
     
     def party_generator(self, data, pos):
         return RSESPTradingPartyInfo(data, pos)
@@ -668,6 +769,8 @@ class RSESPTradingData(GSCTradingData):
             if i == 0:
                 GSCUtilsMisc.copy_to_data(data, self.game_id_pos + 1, mon_data[self.pokemon[i]._precalced_lengths[2]:self.pokemon[i]._precalced_lengths[3]])
                 GSCUtilsMisc.copy_to_data(data, self.ribbon_info_pos, mon_data[self.pokemon[i]._precalced_lengths[3]:self.pokemon[i]._precalced_lengths[4]])
+        data[self.game_id_pos] = self.language
+        data[self.game_id_pos + 3] = self.extra_version_flags
         type(self).generate_checksum(type(self), data, lengths)
         return [data]
 
@@ -681,9 +784,10 @@ class RSESPChecks(GSCChecks):
     rattata_id = 0xA5
     max_evs = 0xFFFF
     max_ivs = 0xF
+    reference_gen = 3
     
-    def __init__(self, section_sizes, do_sanity_checks):
-        super(RSESPChecks, self).__init__(section_sizes, do_sanity_checks)
+    def __init__(self, section_sizes, do_sanity_checks, language = None, use_strict_language_checks = False):
+        super(RSESPChecks, self).__init__(section_sizes, do_sanity_checks, language=language, use_strict_language_checks = use_strict_language_checks)
     
     def get_utils_class(self):
         return RSESPUtils
@@ -700,7 +804,7 @@ class RSESPChecks(GSCChecks):
         self.level = self.utils_class.max_level
         return val
     
-    def is_egg(self):
+    def is_egg(self, index):
         return False
     
     @GSCChecks.clean_check_sanity_checks

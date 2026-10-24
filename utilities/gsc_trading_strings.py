@@ -12,17 +12,27 @@ class GSCTradingStrings:
     kind_battle_str = "battle"
     send_request = "S"
     get_request = "G"
-    set_japanese_str = "Set game as Japanese (Current: International)"
-    unset_japanese_str = "Set game as International (Current: Japanese)"
+    set_japanese_str = "Set game mode as Japanese (Current: International)"
+    unset_japanese_str = "Set game mode as International (Current: Japanese)"
     set_egg_str = "Convert received Pokémon to eggs (Current: Do nothing)"
     unset_egg_str = "Don't convert received Pokémon to eggs (Current: Turn to Eggs)"
     set_efc_str = "Use fast emulator connection (Current: Slow)"
     unset_efc_str = "Use slow emulator connection (Current: Fast)"
-    unset_japanese_str = "Set game as International (Current: Japanese)"
+    language_ask_str = "Possible languages: {language_list}\nLanguage: "
     active_sanity_checks_str = "Disable Sanity checks (Current: Enabled)"
     inactive_sanity_checks_str = "Enable Sanity checks (Current: Disabled)"
     active_kill_on_byte_drops_str = "Disable Crash on synchronous byte drop (Current: Enabled)"
     inactive_kill_on_byte_drops_str = "Enable Crash on synchronous byte drop (Current: Disabled)"
+    unset_profanity_filter_str = "Disable profanity filter (Current: Enabled)"
+    set_profanity_filter_str = "Enable profanity filter (Current: Disabled)"
+    unset_tdpn_str = "Allow nicknamed traded Pokémon (Current: Reset to default)"
+    set_tdpn_str = "Reset nickname to default for traded Pokémon (Current: Keep nickname)"
+    unset_tdtn_str = "Allow OT name for traded Pokémon (Current: Reset to default)"
+    set_tdtn_str = "Reset OT name to default for traded Pokémon (Current: Keep OT name)"
+    unset_bdpn_str = "Enable nicknames in Pokémon battles (Current: Disabled)"
+    set_bdpn_str = "Disable nicknames in Pokémon battles (Current: Enabled)"
+    unset_bdtn_str = "Disable opponent name in Pokémon battles (Current: Enabled)"
+    set_bdtn_str = "Disable opponent name in Pokémon battles (Current: Enabled)"
     websocket_client_error_str = 'Websocket client error:'
     connection_dropped_str = 'Connection dropped'
     p2p_listening_str = 'Listening on {host}:{port}...'
@@ -61,8 +71,12 @@ class GSCTradingStrings:
     waiting_synchro_str = "\nWaiting for the other player to be synchronized..."
     arrived_synchro_str = "\nThe other player arrived. Starting party information exchange..."
     transfer_to_hardware_str = "\rSection {index}: {completion}"
+    incompatible_version_old_protocol_str = "\nThe other player is using an older release of the software.\nEither start a buffered trade instead, or have them update to a version newer than 4.1.0"
     restart_trade_str = "\nStarting a new {kind}."
-    incompatible_trade_str = "\nIt looks like the requested trade is not possible.\nYou can't do a synchronous trade with the International version and the Japanese version\nif at least one Pokémon is holding mail.\nEither do a Buffered trade, or remove the mail.\nShutting down..."
+    incompatible_trade_str = "\nIt looks like the requested trade is not possible.\nYou can't do a synchronous trade with the {language_one} version and the {language_two} version\nif at least one Pokémon is holding mail.\nEither do a Buffered trade, or remove the mail.\nShutting down..."
+    different_language_trade_str = "\nIt looks like the selected language for the data trade is wrong.\nYou chose the {language_one} language, but the game is in {language_two}.\nPlease restart the data trade with the proper language option selected.\nShutting down..."
+    suggest_trade_language_gen2_str = "\nCareful. You selected the {language_one} version and the other user selected the {language_two} version.\nWhile it is still possible to do a Synchronous trade (assuming no Pokémon holds mail),\nit would be better to switch to a Buffered trade."
+    suggest_trade_language_gen1_str = "\nCareful. You selected the {language_one} version and the other user selected the {language_two} version.\nWhile it is still possible to do a Synchronous trade,\nit would be better to switch to a Buffered trade."
     separate_section_str = "\n"
     buffered_negotiation_str = '\nThe other player wants to do a {other_buffered} {kind}.\nWould you like to switch to a {other_buffered} {kind}?'
     buffered_other_negotiation_str = "\nAsking the other player whether they're willing to do a {own_buffered} {kind}..."
@@ -129,23 +143,31 @@ class GSCTradingStrings:
                         "1) Server for connection: {server_host}\n"
                         "2) Port for connection: {server_port}\n"
                         "3) {japanese_str}\n"
-                        "4) {sanity_checks_str}\n"
-                        "5) Change Verbosity (Current: {verbose})\n"
+                        "4) Language: {language_str}\n"
+                        "5) {sanity_checks_str}\n"
+                        "6) Change Verbosity (Current: {verbose})\n"
+                        "pf) {profanity_filter_str}\n"
+                        "tdpn) {trade_default_pokemon_names_str}\n"
+                        "tdtn) {trade_default_trainer_names_str}\n"
                         "\n=============== 2-Player trade/battle Options ===============\n"
-                        "6) Change to {other_buffered} Trading/Battle (Current: {own_buffered})\n"
-                        "7) {kill_on_byte_drops_str}\n"
+                        "7) Change to {other_buffered} Trading/Battle (Current: {own_buffered})\n"
+                        "8) {kill_on_byte_drops_str}\n"
+                        "{battle_default_pokemon_names_str}"
+                        "{battle_default_trainer_names_str}"
                         "{battle_turn_time_str}"
                         "\n=============== Pools trade Options ===============\n"
-                        "8) Set Max Level (Current: {max_level})"
+                        "9) Set Max Level (Current: {max_level})"
                         "{gen_2_eggify_str}"
                         "{emulator_str}"
                         )
-    gen_2_eggify_str = ("\n9) {egg_str}")
+    gen_2_eggify_str = ("\n10) {egg_str}")
     battle_turn_time_option_str = ("btt) Time between turns: {battle_turn_time}\n")
+    battle_default_pokemon_names_option_str = ("bdpn) {battle_default_pokemon_names_str}\n")
+    battle_default_trainer_names_option_str = ("bdtn) {battle_default_trainer_names_str}\n")
     emulator_options_str = ("\n\n=============== Emulator Options ===============\n"
-                            "10) Host for emulator connection: {emulator_host}\n"
-                            "11) Port for emulator connection: {emulator_port}\n"
-                            "12) {efc_str}"
+                            "11) Host for emulator connection: {emulator_host}\n"
+                            "12) Port for emulator connection: {emulator_port}\n"
+                            "13) {efc_str}"
                             )
     
     def int_to_three_str(integer):
@@ -218,6 +240,14 @@ class GSCTradingStrings:
             return GSCTradingStrings.unset_japanese_str
         return GSCTradingStrings.set_japanese_str
     
+    def get_language_str(language):
+        from .text_conversions import PokemonNamesForGen
+        if language <= 0:
+            language = PokemonNamesForGen.ENGLISH_LANGUAGE
+        if language >= len(PokemonNamesForGen.LANGUAGE_STRINGS_LIST[0]):
+            language = PokemonNamesForGen.ENGLISH_LANGUAGE
+        return PokemonNamesForGen.LANGUAGE_STRINGS_LIST[0][language - 1]
+    
     def get_sanity_checks_str(sanity_checks):
         if sanity_checks:
             return GSCTradingStrings.active_sanity_checks_str
@@ -229,7 +259,7 @@ class GSCTradingStrings:
         return GSCTradingStrings.inactive_kill_on_byte_drops_str
     
     def get_eggify_str(options):
-        if not options.gen == 2:
+        if (options.gen != 2) and (options.gen != 3):
             return ""
         egg_str = GSCTradingStrings.set_egg_str
         if options.egg:
@@ -264,9 +294,62 @@ class GSCTradingStrings:
                                                      emulator_str = GSCTradingStrings.get_emulator_str(options),
                                                      max_level = options.max_level,
                                                      gen_2_eggify_str = GSCTradingStrings.get_eggify_str(options),
-                                                     battle_turn_time_str = GSCTradingStrings.get_battle_turn_time_option_str(options)
+                                                     battle_turn_time_str = GSCTradingStrings.get_battle_turn_time_option_str(options),
+                                                     language_str = GSCTradingStrings.get_language_str(options.language),
+                                                     trade_default_pokemon_names_str = GSCTradingStrings.get_trade_default_pokemon_names_str(options),
+                                                     trade_default_trainer_names_str = GSCTradingStrings.get_trade_default_trainer_names_str(options),
+                                                     battle_default_pokemon_names_str = GSCTradingStrings.get_battle_default_pokemon_names_str(options),
+                                                     battle_default_trainer_names_str = GSCTradingStrings.get_battle_default_trainer_names_str(options),
+                                                     profanity_filter_str = GSCTradingStrings.get_profanity_filter_str(options),
                                                      )
              )
+
+    def get_profanity_filter_str(options):
+        if options.profanity_filter:
+            return GSCTradingStrings.unset_profanity_filter_str
+        return GSCTradingStrings.set_profanity_filter_str
+
+    def get_trade_default_pokemon_names_str(options):
+        if options.trade_default_pokemon_names:
+            return GSCTradingStrings.unset_tdpn_str
+        return GSCTradingStrings.set_tdpn_str
+
+    def get_trade_default_trainer_names_str(options):
+        if options.trade_default_trainer_names:
+            return GSCTradingStrings.unset_tdtn_str
+        return GSCTradingStrings.set_tdtn_str
+
+    def get_battle_default_pokemon_names_str(options):
+        if (options.gen == 3) or options.timecapsule:
+            return ""
+        string_to_use = GSCTradingStrings.set_bdpn_str
+        if options.battle_default_pokemon_names:
+            string_to_use = GSCTradingStrings.unset_bdpn_str
+        return GSCTradingStrings.battle_default_pokemon_names_option_str.format(battle_default_pokemon_names_str = string_to_use)
+
+    def get_battle_default_trainer_names_str(options):
+        if (options.gen == 3) or options.timecapsule:
+            return ""
+        string_to_use = GSCTradingStrings.set_bdtn_str
+        if options.battle_default_trainer_names:
+            string_to_use = GSCTradingStrings.unset_bdtn_str
+        return GSCTradingStrings.battle_default_trainer_names_option_str.format(battle_default_trainer_names_str = string_to_use)
+
+    def get_language_family_to_str(val):
+        if val == 2:
+            return "Korean"
+        if val == 1:
+            return "Japanese"
+        return "International"
+
+    def get_mail_index_to_language_str(val):
+        return GSCTradingStrings.get_language_family_to_str(val - 3)
+
+    def get_str_language_incompatibility(own_index, other_index):
+        return GSCTradingStrings.incompatible_trade_str.format(language_one = GSCTradingStrings.get_mail_index_to_language_str(own_index), language_two = GSCTradingStrings.get_mail_index_to_language_str(other_index))
+
+    def get_different_language_trade_str(language_old, language_new):
+        return GSCTradingStrings.different_language_trade_str.format(language_one = GSCTradingStrings.get_language_str(language_old), language_two = GSCTradingStrings.get_language_str(language_new))
 
     def choice_print():
         print(GSCTradingStrings.action_str, end='')
@@ -291,3 +374,7 @@ class GSCTradingStrings:
     
     def change_emu_port_print():
         print(GSCTradingStrings.emulator_port_str, end='')
+
+    def change_language_ask_print():
+        from .text_conversions import PokemonNamesForGen
+        print(GSCTradingStrings.language_ask_str.format(language_list=PokemonNamesForGen.LANGUAGE_STRINGS_LIST[0]), end='')

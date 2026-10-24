@@ -66,7 +66,22 @@ class RBYBattling(GSCBattling):
         return RBYBattlingClient(self, connection, menu.verbose, self.stop_trade, self.party_reader)
     
     def get_checks(self, menu):
-        return RBYChecks(self.special_sections_len, menu.do_sanity_checks)
+        return RBYChecks(self.special_sections_len, menu.do_sanity_checks, language=menu.language, set_default_nickname = menu.battle_default_pokemon_names, set_default_ot = menu.battle_default_trainer_names, set_default_partner = menu.battle_default_trainer_names, do_profanity_checks = menu.profanity_filter)
+
+    def get_checker(self, index, buffered):
+        return self.checks.checks_map[index]
+
+    def get_big_trading_data_recv_lengths(self):
+        return self.special_sections_len
+
+    def process_obtained_big_trading_data(self, data):
+        return data
+    
+    def get_section_length(self, index, buffered):
+        return self.special_sections_len[index]
+
+    def create_sendable_big_trading_data(self):
+        return self.own_pokemon.create_trading_data(self.special_sections_len)
 
     def get_user_choice(self):
         """
