@@ -9,6 +9,7 @@ import os
 import sys
 import boto3
 import botocore
+import traceback
 from pathlib import Path
 from random import Random
 from time import sleep
@@ -1087,6 +1088,7 @@ class WebsocketServer (threading.Thread):
                     time_disconnect = pool_trade_timeout_timer_seconds
             except Exception as e:
                 print('Processing error:', str(e))
+                print(traceback.format_exc())
                 await WebsocketServer.cleaner(curr_room, processer, path)
                 break
 

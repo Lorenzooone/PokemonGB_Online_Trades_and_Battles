@@ -84,7 +84,12 @@ class HighLevelListener:
         """
         # Is the data long enough to be a valid request?
         if (data is not None) and (len(data) >= HighLevelListener.LEN_POSITION):
-            req_info = data[HighLevelListener.REQ_INFO_POSITION:HighLevelListener.REQ_INFO_POSITION+HighLevelListener.LEN_POSITION].decode()
+            if isinstance(data, str):
+                return None # Strings are not accepted...
+            try:
+                req_info = data[HighLevelListener.REQ_INFO_POSITION:HighLevelListener.REQ_INFO_POSITION+HighLevelListener.LEN_POSITION].decode()
+            except:
+                return None # Discard bad decodes...
             req_kind = req_info[0]
             req_type = req_info[1:HighLevelListener.LEN_POSITION]
             # If it's a send request, is it long enough to have the data length field?
