@@ -67,6 +67,7 @@ class WebsocketClient:
     host = None
     port = None
     SLEEP_TIMER = 0.01
+    websocket_open_timeout = 30 # If the server is down, it takes a while to come online...
     
     def __init__(self, host, port, kill_function):
         WebsocketClient.host = host
@@ -83,7 +84,7 @@ class WebsocketClient:
         :param room: Room in which the client registers.
         """
         try:
-            async with websockets.connect(WebsocketClient.ws_base_str + "/link" + str(gen) + "/" +str(room).zfill(5), ping_interval=None) as websocket:
+            async with websockets.connect(WebsocketClient.ws_base_str + "/link" + str(gen) + "/" +str(room).zfill(5), ping_interval=None, open_timeout=WebsocketClient.websocket_open_timeout) as websocket:
                 await websocket.send("")
                 data = await websocket.recv()
                 await WebsocketClient.handler(websocket, other, loop)
@@ -98,7 +99,7 @@ class WebsocketClient:
         :param room: Room in which the client registers.
         """
         try:
-            async with websockets.connect(WebsocketClient.ws_base_str + "/bttl" + str(gen) + "/" +str(room).zfill(5), ping_interval=None) as websocket:
+            async with websockets.connect(WebsocketClient.ws_base_str + "/bttl" + str(gen) + "/" +str(room).zfill(5), ping_interval=None, open_timeout=WebsocketClient.websocket_open_timeout) as websocket:
                 await websocket.send("")
                 data = await websocket.recv()
                 await WebsocketClient.handler(websocket, other, loop)
@@ -138,7 +139,7 @@ class WebsocketClient:
         Function which tries to get a websocket connection to the server.
         """
         try:
-            async with websockets.connect(WebsocketClient.ws_base_str + "/pool" + str(gen), ping_interval=None) as websocket:
+            async with websockets.connect(WebsocketClient.ws_base_str + "/pool" + str(gen), ping_interval=None, open_timeout=WebsocketClient.websocket_open_timeout) as websocket:
                 await WebsocketClient.handler(websocket, other, loop)
         except Exception as e:
             print(GSCTradingStrings.websocket_client_error_str, str(e))
