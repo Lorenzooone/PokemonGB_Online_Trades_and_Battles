@@ -9,7 +9,7 @@ class GSCTradingMenu:
     """
     Class used to handle the various possible menus.
     """
-    default_server = ["pokemon-gb-online-trades.herokuapp.com", None]
+    default_server = ["pokemon-gb-online-trades.herokuapp.com", None, True]
     default_emulator = ["localhost", 8765]
     default_max_level = 100
 
@@ -20,7 +20,7 @@ class GSCTradingMenu:
             kill_function()
         
         # Initialize the menu
-        self.server = [args.server_host, args.server_port]
+        self.server = [args.server_host, args.server_port, args.server_ssl]
         self.buffered = args.buffered
         self.japanese = args.japanese
         self.max_level = args.max_level
@@ -83,6 +83,7 @@ class GSCTradingMenu:
             "tdtn": self.handle_trade_default_trainer_names,
             "bdtn": self.handle_battle_default_trainer_names,
             "pf": self.handle_profanity_filter,
+            "ssl": self.handle_ssl_connection,
             }
         if is_emulator:
             self.options_menu_handlers["11"] = self.handle_emulator_host_option
@@ -325,6 +326,10 @@ class GSCTradingMenu:
     def handle_profanity_filter(self):
         self.profanity_filter = not self.profanity_filter
         return False
+
+    def handle_ssl_connection(self):
+        self.server[2] = not self.server[2]
+        return False
     
     def handle_verbose_option(self):
         self.verbose = not self.verbose
@@ -382,6 +387,8 @@ class GSCTradingMenu:
                             help="server's host")
         parser.add_argument("-sp", "--server_port", dest="server_port", default = self.default_server[1],
                             help="server's port", type=int)
+        parser.add_argument("-dssl", "--disable_server_ssl", action="store_false", dest="server_ssl", default = True,
+                            help="disable SSL when connecting to server (for local testing)")
         if is_emulator:
             parser.add_argument("-eh", "--emulator_host", dest="emulator_host", default = self.default_emulator[0],
                                 help="emulator's local host")

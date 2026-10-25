@@ -20,7 +20,7 @@ class ProxyConnectionRunner (threading.Thread):
         self.gen = menu.gen
         self.hll = HighLevelListener()
         self.kill_function = kill_function
-        self.ws = WebsocketClient(menu.server[0], menu.server[1], kill_function)
+        self.ws = WebsocketClient(menu.server[0], menu.server[1], menu.server[2], kill_function)
 
     def run(self):
         self.ws.get_peer(self.hll, self.room, self.gen)
@@ -38,7 +38,7 @@ class ProxyBattleConnectionRunner (threading.Thread):
         self.gen = menu.gen
         self.hll = HighLevelListener()
         self.kill_function = kill_function
-        self.ws = WebsocketClient(menu.server[0], menu.server[1], kill_function)
+        self.ws = WebsocketClient(menu.server[0], menu.server[1], menu.server[2], kill_function)
 
     def run(self):
         self.ws.get_battle_peer(self.hll, self.room, self.gen)
@@ -55,7 +55,7 @@ class PoolTradeRunner (threading.Thread):
         self.gen = menu.gen
         self.hll = HighLevelListener()
         self.kill_function = kill_function
-        self.ws = WebsocketClient(menu.server[0], menu.server[1], kill_function)
+        self.ws = WebsocketClient(menu.server[0], menu.server[1], menu.server[2], kill_function)
 
     def run(self):
         self.ws.get_pool(self.hll, self.gen)
@@ -69,13 +69,21 @@ class WebsocketClient:
     SLEEP_TIMER = 0.01
     websocket_open_timeout = 30 # If the server is down, it takes a while to come online...
     
-    def __init__(self, host, port, kill_function):
+    def __init__(self, host, port, use_ssl, kill_function):
         WebsocketClient.host = host
         WebsocketClient.port = port
+        WebsocketClient.use_ssl = use_ssl
         WebsocketClient.kill_function = kill_function
-        WebsocketClient.ws_base_str = "ws://"+ WebsocketClient.host
+        preamble = "ws://"
+        if use_ssl:
+            preamble = "wss://"
+        WebsocketClient.ws_base_str = preamble + WebsocketClient.host
         if WebsocketClient.port is not None:
             WebsocketClient.ws_base_str += ":" + str(WebsocketClient.port)
+
+    def print_error_ssl_connection_try(e):
+        if (type(e) is ConnectionResetError) and (WebsocketClient.use_ssl):
+            print(GSCTradingStrings.websocket_client_ssl_error_str)
 
     async def get_peer_server_connect(other, loop, room, gen):
         """
@@ -89,6 +97,7 @@ class WebsocketClient:
                 data = await websocket.recv()
                 await WebsocketClient.handler(websocket, other, loop)
         except Exception as e:
+            WebsocketClient.print_error_ssl_connection_try(e)
             print(GSCTradingStrings.websocket_client_error_str, str(e))
             WebsocketClient.kill_function()
 
@@ -104,6 +113,7 @@ class WebsocketClient:
                 data = await websocket.recv()
                 await WebsocketClient.handler(websocket, other, loop)
         except Exception as e:
+            WebsocketClient.print_error_ssl_connection_try(e)
             print(GSCTradingStrings.websocket_client_error_str, str(e))
             WebsocketClient.kill_function()
 
@@ -142,6 +152,7 @@ class WebsocketClient:
             async with websockets.connect(WebsocketClient.ws_base_str + "/pool" + str(gen), ping_interval=None, open_timeout=WebsocketClient.websocket_open_timeout) as websocket:
                 await WebsocketClient.handler(websocket, other, loop)
         except Exception as e:
+            WebsocketClient.print_error_ssl_connection_try(e)
             print(GSCTradingStrings.websocket_client_error_str, str(e))
             WebsocketClient.kill_function()
     

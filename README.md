@@ -1,5 +1,5 @@
 # PokemonGB_Online_Trades_and_Battles
-This is an overlay for Pokémon Red/Blue/Yellow, Gold/Silver/Crystal and Ruby/Sapphire/Emerald/Fire Red/Leaf Green which aims at adding Online Trading and Battle support.
+This is an overlay for Pokémon Red/Blue/Yellow and Gold/Silver/Crystal which adds Online Trading and Battle support.
 It also adds Online Trading support to Pokémon Ruby/Sapphire/Emerald/Fire Red/Leaf Green.
 
 Two interfaces are currently available. One for a GB Link Cable to USB Adapter, and the other for BGB.

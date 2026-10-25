@@ -34,6 +34,7 @@ class GSCTradingStrings:
     unset_bdtn_str = "Disable opponent name in Pokémon battles (Current: Enabled)"
     set_bdtn_str = "Disable opponent name in Pokémon battles (Current: Enabled)"
     websocket_client_error_str = 'Websocket client error:'
+    websocket_client_ssl_error_str = "Connection Reset requested... Does the server support SSL?\nIf you are running the server locally, be sure to launch the client with -dssl!\n"
     connection_dropped_str = 'Connection dropped'
     p2p_listening_str = 'Listening on {host}:{port}...'
     p2p_server_str = 'Received connection from {host}:{port}'
@@ -143,6 +144,7 @@ class GSCTradingStrings:
                         "0) Exit (Default)\n"
                         "1) Server for connection: {server_host}\n"
                         "2) Port for connection: {server_port}\n"
+                        "ssl) Use SSL for connection: {use_ssl}\n"
                         "3) {japanese_str}\n"
                         "4) Language: {language_str}\n"
                         "5) {sanity_checks_str}\n"
@@ -288,7 +290,7 @@ class GSCTradingStrings:
         return GSCTradingStrings.emulator_options_str.format(emulator_host=options.emulator[0], emulator_port=options.emulator[1], efc_str=GSCTradingStrings.get_efc_str(options))
         
     def options_menu_print(options):
-        print(GSCTradingStrings.options_menu_str.format(server_host=options.server[0], server_port=options.server[1],
+        print(GSCTradingStrings.options_menu_str.format(server_host=options.server[0], server_port=options.server[1], use_ssl = str(options.server[2]),
                                                      japanese_str=GSCTradingStrings.get_japanese_str(options.japanese),
                                                      sanity_checks_str=GSCTradingStrings.get_sanity_checks_str(options.do_sanity_checks),
                                                      verbose=options.verbose,
