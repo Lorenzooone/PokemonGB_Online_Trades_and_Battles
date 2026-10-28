@@ -44,7 +44,7 @@ class BGBLinkCableServer(threading.Thread):
     PACKET_FORMAT = '<4BI'
     PACKET_SIZE_BYTES = 8
 
-    def __init__(self, data_handler, menu, kill_function, very_verbose=False):
+    def __init__(self, data_handler, data_feeder, bgb_master_client_data_handler, menu, kill_function, very_verbose=False):
         threading.Thread.__init__(self)
         self.daemon=True
         self._handlers = {
@@ -57,7 +57,6 @@ class BGBLinkCableServer(threading.Thread):
             109: self._handle_want_disconnect
         }
         self._last_received_timestamp = 0
-        self._client_data_handler = data_handler
         self.can_go = False
         self.verbose = menu.verbose
         self.very_verbose = very_verbose
@@ -65,11 +64,15 @@ class BGBLinkCableServer(threading.Thread):
         self.port = menu.emulator[1]
         self.kill_function = kill_function
         self.fast = menu.fast_emu_conn
-        self.to_send = None
         self.last_offset = 0
         self.mask = 0x7FFFFFFF
         self.mask_add_for_sub = self.mask + 1
         self.turbo_transfer = False
+        # Handle communications where we are the master...
+        self._client_data_feeder = data_feeder
+        self._client_data_handler = data_handler
+        # Handle communications where we are not the master...
+        self._bgb_master_client_data_handler = bgb_master_client_data_handler
     
     def verbose_print(self, to_print, end='\n'):
         """
@@ -88,10 +91,7 @@ class BGBLinkCableServer(threading.Thread):
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-            '''
-            server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY,
-                    1)  # requires nodelay
-            '''
+            server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # requires nodelay
             try:
                 server.bind((self.host, self.port))
             except Exception as e:
@@ -159,10 +159,20 @@ class BGBLinkCableServer(threading.Thread):
         pass
 
     def _handle_sync1(self, data, control, _b4):
+        answer = None
+        control_answer = 0
+        if self.can_go:
+            answer = self._bgb_master_client_data_handler(data)
+
+        if answer is None:
+            answer = 0
+        else:
+            control_answer = control & 0x7E
+
         return struct.pack(
             self.PACKET_FORMAT,
             105,        # Sync2 packet
-            0,          # Not doing a passive transfer
+            answer,     # Answered value
             0x80,       # Deprecated
             0,          # Deprecated
             self._last_received_timestamp
@@ -170,9 +180,8 @@ class BGBLinkCableServer(threading.Thread):
 
     def send_as_master(self):
         if self._last_received_timestamp != 0:
-            response = self.to_send
+            response = self._client_data_feeder()
             if response is not None:
-                self.to_send = None
                 return struct.pack(
                     self.PACKET_FORMAT,
                     104,        # Master data packet

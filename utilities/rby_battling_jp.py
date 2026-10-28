@@ -42,5 +42,5 @@ class RBYBattlingJP(RBYBattling):
         end_of_rby_data_pos + 2 + (single_text_len * 11): [pokemon_name_len_diff - 2, end_of_line],
     }, {}]
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(RBYBattlingJP, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(RBYBattlingJP, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)

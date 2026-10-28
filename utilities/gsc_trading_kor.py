@@ -653,8 +653,8 @@ class GSCTradingKOR(GSCTrading):
     special_sections_sync = [True, True, True, False, False, False]
     drop_bytes_checks = [[0xA, 0x1B9, 0xC5, 0x241, 0x11D, 0x241], [next_section, next_section, mail_next_section, no_input, no_input, no_input], [0,4,0,0,0,0]]
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(GSCTradingKOR, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(GSCTradingKOR, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)
         self.kor_mail_converter = GSCKORMailConverter(self.checks)
 
     def get_mail_section_id(self):

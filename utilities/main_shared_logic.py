@@ -27,39 +27,39 @@ def get_connection(menu, kill_function):
         menu.is_battle = False
 
     if menu.is_battle:
-    	connection = ProxyBattleConnectionRunner(menu, kill_function)
+        connection = ProxyBattleConnectionRunner(menu, kill_function)
     elif menu.trade_type == GSCTradingStrings.two_player_trade_str:
-    	connection = ProxyConnectionRunner(menu, kill_function)
+        connection = ProxyConnectionRunner(menu, kill_function)
     elif menu.trade_type == GSCTradingStrings.pool_trade_str:
         connection = PoolTradeRunner(menu, kill_function)
     return connection
 
-def get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = False):
+def get_data_trader_class(data_transmitter, connection, menu, kill_function, pre_sleep = False):
     trade_c = None
     if menu.gen == 2:
         if menu.is_battle:
             if menu.japanese:
-                trade_c = GSCBattlingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = GSCBattlingJP(data_transmitter, connection, menu, kill_function, pre_sleep)
             else:
-                trade_c = GSCBattling(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = GSCBattling(data_transmitter, connection, menu, kill_function, pre_sleep)
         else:
             if menu.japanese:
-                trade_c = GSCTradingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = GSCTradingJP(data_transmitter, connection, menu, kill_function, pre_sleep)
             elif menu.language == PokemonNamesForGen.KOREAN_LANGUAGE:
-                trade_c = GSCTradingKOR(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = GSCTradingKOR(data_transmitter, connection, menu, kill_function, pre_sleep)
             else:
-                trade_c = GSCTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = GSCTrading(data_transmitter, connection, menu, kill_function, pre_sleep)
     elif menu.gen == 3:
-        trade_c = RSESPTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
+        trade_c = RSESPTrading(data_transmitter, connection, menu, kill_function, pre_sleep)
     elif menu.gen == 1:
         if menu.is_battle:
             if menu.japanese:
-                trade_c = RBYBattlingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = RBYBattlingJP(data_transmitter, connection, menu, kill_function, pre_sleep)
             else:
-                trade_c = RBYBattling(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = RBYBattling(data_transmitter, connection, menu, kill_function, pre_sleep)
         else:
             if menu.japanese:
-                trade_c = RBYTradingJP(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = RBYTradingJP(data_transmitter, connection, menu, kill_function, pre_sleep)
             else:
-                trade_c = RBYTrading(sender, receiver, connection, menu, kill_function, pre_sleep)
+                trade_c = RBYTrading(data_transmitter, connection, menu, kill_function, pre_sleep)
     return trade_c

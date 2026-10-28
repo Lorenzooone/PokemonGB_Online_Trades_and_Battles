@@ -49,8 +49,8 @@ class RBYBattling(GSCBattling):
     possible_indexes = set(range(0x60, 0x70))
     timeout_user_choice_no_data = 6.0
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(RBYBattling, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(RBYBattling, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)
         self.can_drop_commands = False
         self.heal_after_not_valid_buffered = True
         #self.extremely_verbose = True

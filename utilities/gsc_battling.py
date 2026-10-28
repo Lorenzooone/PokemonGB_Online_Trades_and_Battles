@@ -172,8 +172,8 @@ class GSCBattling(GSCTrading):
     drop_bytes_checks = [[0xA, 0x1B9, 0xC5], [next_section, next_section, no_input], [0,0,0]]
     possible_indexes = set(range(0x80, 0x90))
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(GSCBattling, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(GSCBattling, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)
         self.curr_own_mon_index = 0
         self.curr_other_mon_index = 0
         self.lock_byte_time_start = datetime.datetime.now()

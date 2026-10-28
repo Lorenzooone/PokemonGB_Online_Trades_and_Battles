@@ -33,13 +33,38 @@ PID_GBLink_2 = 0x000a
 out_id_base = 0
 out_id_gblink2 = 1
 
+out_id_names = ["GB Link Port to USB Adapter", "GBLink v2"]
+
 path = "pokemon_gen3_to_genx_mb.gba"
 def kill_function():
     os.kill(os.getpid(), signal.SIGINT)
+    
+class USBLinkTrader:
+
+    def __init__(self, receiver = None, sender = None, raw_receiver = None, list_sender = None, is_serial = False, out_id = out_id_base):
+        self.receiver = receiver
+        self.sender = sender
+        self.raw_receiver = raw_receiver
+        self.list_sender = list_sender
+        self.is_serial = is_serial
+        self.out_id = out_id
+        is_bad = (receiver is None) or (sender is None) or (raw_receiver is None)
+        if not is_bad:
+            print("Connected to: " + out_id_names[self.out_id])
+
+    def get_reconfigurator_function(self):
+        if self.out_id == out_id_gblink2:
+            return reconfigure_fw2
+        return reconfigure_reconfig_fw
+
+    def get_requires_read_after_write(self):
+        if self.out_id == out_id_gblink2:
+            return True # Not Async...
+        return False
 
 # The 2.x firmware is configured with commands on its own endpoint,
 # instead of the magic packet on the data endpoint
-def reconfigure_fw2(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver):
+def reconfigure_fw2(us_between_transfer, bytes_for_transfer, data_transmitter):
     if epCmd is None:
         print("\nMISSING EP CMD!\nDisabling firmware reconfiguration!\n")
         return 0
@@ -59,14 +84,14 @@ def get_configure_list_reconfig_fw(us_between_transfer, bytes_for_transfer):
     config_base += [us_between_transfer & 0xFF, (us_between_transfer >> 8) & 0xFF, (us_between_transfer >> 16) & 0xFF, bytes_for_transfer & 0xFF]
     return config_base
 
-def reconfigure_reconfig_fw(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver):
-    if list_sender is None:
+def reconfigure_reconfig_fw(us_between_transfer, bytes_for_transfer, data_transmitter):
+    if data_transmitter.list_sender is None:
         return 0
     config_base = get_configure_list_reconfig_fw(us_between_transfer, bytes_for_transfer)
-    list_sender(config_base, chunk_size=len(config_base))
-    return multiboot.read_all(raw_receiver)
+    data_transmitter.list_sender(config_base, chunk_size=len(config_base))
+    return multiboot.read_all(data_transmitter.raw_receiver)
 
-def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
+def transfer_func(data_transmitter):
     menu = GSCTradingMenu(kill_function)
     menu.handle_menu()
     
@@ -88,10 +113,10 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
 
     result = 1
     while result != 0:
-        result = multiboot.read_all(raw_receiver)
-    ret = get_reconfigurator_function(out_id)(us_between_transfer, bytes_for_transfer, list_sender, raw_receiver)
+        result = multiboot.read_all(data_transmitter.raw_receiver)
+    ret = data_transmitter.get_reconfigurator_function()(us_between_transfer, bytes_for_transfer, data_transmitter)
 
-    if is_serial and (ret != 1):
+    if data_transmitter.is_serial and (ret != 1):
         print("WARNING: Firmware not recognized!\nWhen using Serial, you MUST use a firmware which doesn't alter the output!\nIt's best if you update to the one available at:\nhttps://github.com/Lorenzooone/gb-link-firmware-reconfigurable/releases")
 
     if(menu.gen == 3) and (ret != 1):
@@ -102,10 +127,10 @@ def transfer_func(sender, receiver, list_sender, raw_receiver, is_serial):
         pre_sleep = True
 
     if menu.multiboot:
-        multiboot.multiboot(raw_receiver, sender, list_sender, path, get_reconfigurator_function(out_id), get_requires_read_after_write(out_id))
+        multiboot.multiboot(data_transmitter.raw_receiver, data_transmitter.sender, data_transmitter.list_sender, path, data_transmitter.get_reconfigurator_function(), data_transmitter.get_requires_read_after_write())
         return
 
-    trade_c = get_data_trader_class(sender, receiver, connection, menu, kill_function, pre_sleep = pre_sleep)
+    trade_c = get_data_trader_class(data_transmitter, connection, menu, kill_function, pre_sleep = pre_sleep)
     connection.start()
 
     start_logic(trade_c, menu, TradingClientType.python_usb)
@@ -415,22 +440,11 @@ def serial_method():
     out_id = out_id_base
     return True
 
-def get_reconfigurator_function(curr_out_id):
-    if curr_out_id == out_id_gblink2:
-        return reconfigure_fw2
-    return reconfigure_reconfig_fw
-
-def get_requires_read_after_write(curr_out_id):
-    if curr_out_id == out_id_gblink2:
-        return True # Not Async...
-    return False
-
 signal.signal(signal.SIGINT, signal_handler)
 
 try_serial = False
 try_libusb = False
 try_winusbcdc = False
-is_serial = False
 try:
     import usb.core
     import usb.util
@@ -451,40 +465,27 @@ try:
 except:
     pass
 
-sender = None
-receiver = None
-list_sender = None
-raw_receiver = None
+data_transmitter = USBLinkTrader()
 found = False
 
 # The execution path
 try:
     if (not found) and try_libusb:
         if(libusb_method()):
-            sender = sendByte
-            receiver = receiveByte
-            list_sender = sendList
-            raw_receiver = receiveByte_raw
+            data_transmitter = USBLinkTrader(sender = sendByte, receiver = receiveByte, raw_receiver = receiveByte_raw, list_sender = sendList, out_id = out_id)
             found = True
     if (not found) and try_winusbcdc:
         if(winusbcdc_method()):
-            sender = sendByte_win
-            receiver = receiveByte_win
-            list_sender = sendList_win
-            raw_receiver = receiveByte_raw_win
+            data_transmitter = USBLinkTrader(sender = sendByte_win, receiver = receiveByte_win, raw_receiver = receiveByte_raw_win, list_sender = sendList_win, out_id = out_id)
             found = True
     if (not found) and try_serial:
         if(serial_method()):
-            sender = sendByte_serial
-            receiver = receiveByte_serial
-            list_sender = sendList_serial
-            raw_receiver = receiveByte_raw_serial
+            data_transmitter = USBLinkTrader(sender = sendByte_serial, receiver = receiveByte_serial, raw_receiver = receiveByte_raw_serial, list_sender = sendList_serial, out_id = out_id, is_serial = True)
             found = True
-            is_serial = True
 
     if found:
         print("USB connection established!")
-        transfer_func(sender, receiver, list_sender, raw_receiver, is_serial)
+        transfer_func(data_transmitter)
     else:
         print("Couldn't find USB device!")
         missing = ""

@@ -176,8 +176,8 @@ class RSESPTrading(GSCTrading):
     decline_trade_value = [decline_trade[0]<<16, decline_trade[1]<<16]
     no_input = 0
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(RSESPTrading, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(RSESPTrading, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)
         
     def get_and_init_utils_class(self):
         RSESPUtils()
@@ -417,10 +417,10 @@ class RSESPTrading(GSCTrading):
     def sync_with_cable(self, objective):
         recv = 0
         while recv != objective:
-            self.sendByte(0, 1)
-            recv = self.receiveByte(1)
-        self.sendByte(0, 3)
-        recv = self.receiveByte(3)
+            self.data_transmitter.sender(0, 1)
+            recv = self.data_transmitter.receiver(1)
+        self.data_transmitter.sender(0, 3)
+        recv = self.data_transmitter.receiver(3)
 
     def wait_for_success(self, next, num_success):
         """

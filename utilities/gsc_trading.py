@@ -535,9 +535,8 @@ class GSCTrading:
     decline_trade = 0x71
     accept_trade = 0x72
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        self.sendByte = sending_func
-        self.receiveByte = receiving_func
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        self.data_transmitter = data_transmitter
         self.checks = self.get_checks(menu)
         self.comms = self.get_comms(connection, menu)
         self.menu = menu
@@ -958,8 +957,8 @@ class GSCTrading:
         """
         if not self.pre_sleep:
             self.sleep_func()
-        self.sendByte(send_data, self.num_bytes_per_transfer, turbo_transfer = self.turbo_transfer)
-        recv = self.receiveByte(self.num_bytes_per_transfer)
+        self.data_transmitter.sender(send_data, self.num_bytes_per_transfer, turbo_transfer = self.turbo_transfer)
+        recv = self.data_transmitter.receiver(self.num_bytes_per_transfer)
         if self.extremely_verbose:
             print(GSCTradingStrings.byte_transfer_str.format(send_data=send_data, recv=recv))
         return recv

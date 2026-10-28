@@ -46,5 +46,5 @@ class GSCBattlingJP(GSCBattling):
     }, {}, {}, {}]
     drop_bytes_checks = [[0xA, 0x1B9, 0xC5], [next_section, next_section, no_input], [0,4,0]]
     
-    def __init__(self, sending_func, receiving_func, connection, menu, kill_function, pre_sleep):
-        super(GSCBattlingJP, self).__init__(sending_func, receiving_func, connection, menu, kill_function, pre_sleep)
+    def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
+        super(GSCBattlingJP, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)
