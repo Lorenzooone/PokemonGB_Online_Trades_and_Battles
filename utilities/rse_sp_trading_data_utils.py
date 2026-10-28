@@ -745,7 +745,7 @@ class RSESPTradingData(GSCTradingData):
         return False
         
     @GSCTradingData.check_pos_validity
-    def evolve_mon(self, pos):
+    def evolve_mon(self, pos, target_language, own_language):
         """
         Handles evolving a pokémon in the party.
         Leave it to the homebrew.

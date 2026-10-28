@@ -262,7 +262,7 @@ class RBYTradingData(GSCTradingData):
         return False
         
     @GSCTradingData.check_pos_validity
-    def evolve_mon(self, pos):
+    def evolve_mon(self, pos, target_language, own_language):
         """
         Handles evolving a pokémon in the party.
         Returns None if it won't evolve.
@@ -275,7 +275,7 @@ class RBYTradingData(GSCTradingData):
         # In Gen 1 to Gen 2, the everstone works only one way!
         if evolution == self.pokemon[pos].get_species():
             return True
-        self.evolution_procedure(pos, evolution)
+        self.evolution_procedure(pos, evolution, target_language, own_language)
         curr_learning = self.pokemon[pos].learnable_moves()
         # Gen 1 to Gen 2 doesn't allow us to predict which moves will be taught!
         # It may even glitch out!

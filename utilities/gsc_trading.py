@@ -1379,8 +1379,8 @@ class GSCTrading:
                 if not self.is_choice_decline(received_accepted) and not self.is_choice_decline(accepted):
                     # Apply the trade to the data
                     self.own_pokemon.trade_mon(self.other_pokemon, self.convert_choice(sent_mon), self.convert_choice(received_choice), self.checks)
-                    self.own_blank_trade = self.own_pokemon.requires_input(self.own_pokemon.get_last_mon_index(), self.special_mons)
-                    self.other_blank_trade = self.other_pokemon.requires_input(self.other_pokemon.get_last_mon_index(), self.special_mons)
+                    self.own_blank_trade = self.own_pokemon.requires_input(self.own_pokemon.get_last_mon_index(), self.special_mons, self.menu.language, self.menu.language)
+                    self.other_blank_trade = self.other_pokemon.requires_input(self.other_pokemon.get_last_mon_index(), self.special_mons, self.other_language, self.menu.language)
                     
                     # Check whether we need to restart entirely.
                     success_set = self.create_success_set(self.own_pokemon.get_traded_mons(self.other_pokemon))

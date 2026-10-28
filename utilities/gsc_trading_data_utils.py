@@ -1,6 +1,7 @@
 import math
 import sys
 import types
+import copy
 from .gsc_trading_strings import GSCTradingStrings
 
 debug_print_if_file_is_missing = False
@@ -986,9 +987,48 @@ class GSCTradingPokémonInfo:
             self.mail = GSCTradingMailData()
         self.mail.set_data_mail_sender(data[start:start+self.sender_len])
     
-    def is_nicknamed(self, language):
+    def get_languages_for_which_not_nicknamed(self, is_egg):
+        # May be useful in general...
+        # Maybe to determine the language of a Pokémon?
+        # In particular when it comes to JPN/KOR/FRE/GER
         from .text_conversions import PokemonNamesForGen
-        return not self.nickname.values_equal(PokemonNamesForGen.get_pokemon_name_for_gen(self.get_species(), self.reference_gen, language=language))
+        out_non_nicknamed_languages = []
+
+        for language in PokemonNamesForGen.all_languages_list:
+            nickname_real = copy.deepcopy(self.nickname)
+            self.apply_all_text_transforms(nickname_real, language)
+
+            # Get correct name
+            if is_egg:
+                base_name = PokemonNamesForGen.get_egg_name_for_gen(self.reference_gen, language=language)
+            else:
+                base_name = PokemonNamesForGen.get_pokemon_name_for_gen(self.get_species(), self.reference_gen, language=language)
+            if base_name is None:
+                continue
+
+            # Ensure the names have the same length
+            if len(base_name) < len(nickname_real.values):
+                base_name += [self.utils_class.end_of_line] * (len(nickname_real.values) - len(base_name))
+            if len(nickname_real.values) < len(base_name):
+                nickname_real.values += [self.utils_class.end_of_line] * (len(base_name) - len(nickname_real.values))
+
+            # Do the actual comparison up to EOL
+            is_equal = True
+            for i in range(len(base_name)):
+                if base_name[i] != nickname_real.values[i]:
+                    is_equal = False
+                    break
+                if base_name[i] == self.utils_class.end_of_line:
+                    break
+
+            if is_equal:
+                out_non_nicknamed_languages += [language]
+
+        return out_non_nicknamed_languages
+    
+    def is_nicknamed(self, language, is_egg):
+        from .text_conversions import PokemonNamesForGen
+        return language not in self.get_languages_for_which_not_nicknamed(is_egg)
 
     def get_nickname_general(self, language):
         from .text_conversions import PokemonNamesForGen
@@ -1511,31 +1551,54 @@ class GSCTradingData:
             mail_owned |= self.mon_has_mail(i)
         return mail_owned
     
-    def evolution_procedure(self, pos, evolution, language):
+    def evolution_procedure(self, pos, evolution, target_language, own_language):
         """
         Procedure which actually evolves the Pokémon in the data.
         """
+        from .text_conversions import PokemonNamesForGen
+        if target_language is None:
+            target_language = PokemonNamesForGen.ENGLISH_LANGUAGE
         reset_name = False
-        if not self.pokemon[pos].is_nicknamed(language):
+        # If it is evolving, it is not an egg for sure.
+        if not self.pokemon[pos].is_nicknamed(target_language, False):
             reset_name = True
+
         self.pokemon[pos].set_species(evolution)
+
         if reset_name:
-            self.pokemon[pos].set_default_nickname(language)
+            checks = self.utils_class.get_basic_checks()
+            self.pokemon[pos].set_default_nickname(target_language)
+
+            # Example corner case: KOR sends to INT a Haunter with
+            # an Everstone. INT removes the Everstone and sends Haunter
+            # back. Now Haunter will evolve in KOR... INT needs to
+            # receive proper patched data for Gengar! It cannot reuse
+            # the data for Haunter! And it should not receive the data
+            # as-is, without patching!
+
+            # Patch out bad characters for ourselves. We will be reusing
+            # this data, so make it work properly. Even if it is not
+            # going to be data we end up using (e.g. the Pokémon ended
+            # up evolving in our own game and was not nicknamed),
+            # might as well do it to be safe, as there are no downsides...
+            # If it is evolving, it is not an egg for sure.
+            self.pokemon[pos].patch_out_bad_chars_for_language_buffered_only(own_language, checks, False)
+
         self.party_info.set_id(pos, self.pokemon[pos].get_species())
         self.pokemon[pos].update_stats()
 
     @check_pos_validity
-    def requires_input(self, pos, special_mons_set):
+    def requires_input(self, pos, special_mons_set, target_language, own_language):
         """
         Handles detemining if the mon requires special care
         """
-        result = GSCUtilsMisc.default_if_none(self.evolve_mon(pos), False)
+        result = GSCUtilsMisc.default_if_none(self.evolve_mon(pos, target_language, own_language), False)
         if not result:
             result = self.is_special_mon(pos, special_mons_set)
         return result
 
     @check_pos_validity
-    def evolve_mon(self, pos):
+    def evolve_mon(self, pos, target_language, own_language):
         """
         Handles evolving a pokémon in the party.
         Returns None if it won't evolve.
@@ -1548,7 +1611,7 @@ class GSCTradingData:
         evo_item = self.utils_class.get_evolution_item(self.pokemon[pos].get_species())
         if evo_item is not None:
             self.pokemon[pos].set_item()
-        self.evolution_procedure(pos, evolution)
+        self.evolution_procedure(pos, evolution, target_language, own_language)
         curr_learning = self.pokemon[pos].learnable_moves()
         if curr_learning is not None:
             for i in range(len(curr_learning)):
