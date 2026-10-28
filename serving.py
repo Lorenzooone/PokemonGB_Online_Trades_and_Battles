@@ -77,6 +77,14 @@ def remove_ws_connection():
     global currently_open_connections
     currently_open_connections -= 1
 
+def get_language_value_to_append(m, gen):
+    default_name_languages = m[0].get_languages_for_which_not_nicknamed(m[1])
+    default_name_languages_value = GSCUtils.convert_language_list_to_int(default_name_languages, m, gen)
+    language_value_to_set = m[2] & default_name_languages_value
+    if language_value_to_set == 0:
+        language_value_to_set = m[2]
+    return language_value_to_set
+
 def convert_mons_to_file_data(gen):
     if gen < 0:
         return [0]
@@ -90,9 +98,9 @@ def convert_mons_to_file_data(gen):
     for m in mons[gen]:
         to_add = []
         if gen == 1:
-            to_add = GSCUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(m[2])
+            to_add = GSCUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(get_language_value_to_append(m, gen))
         elif gen == 0:
-            to_add = RBYUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(m[2])
+            to_add = RBYUtils.single_mon_to_data(m[0], m[1]) + GSCUtilsMisc.write_int_le_to_buffer(get_language_value_to_append(m, gen))
         elif gen == 2:
             to_add = RSESPUtils.single_mon_to_data(m[0], m[1])
         if first_run:
