@@ -24,29 +24,108 @@ class PokeTrader:
         self.fast = menu.fast_emu_conn
         self._server = BGBLinkCableServer(self.update_data, self.get_send_data, self.bgb_master_client_data_handler, menu, kill_function)
         self.connection = get_connection(menu, kill_function)
-        self.is_bgb_master = False
+        self.is_device_master = False
+        self.no_data_default = 0
+        # Section sending mode
+        self.is_sending_section_preambled = False
+        self.recv_section_data = []
+        self.sending_section_data = []
+        self.index_in_sending_section_data = 0
+        self.preamble_byte = 0
+        self.byte_while_waiting = 0
+        self.has_preamble_started = False
+        self.is_past_preamble = False
 
     def run(self):
         self._server.start()
         self.connection.start()
-        
+
+    def can_device_be_master(self):
+        return True
+
+    def update_no_data_default(self, new):
+        self.no_data_default = new
+
+    def send_section_preambled(self, sending_data, preamble_byte, byte_while_waiting):
+        self.sending_section_data = sending_data
+        self.index_in_sending_section_data = 0
+        self.preamble_byte = preamble_byte
+        self.byte_while_waiting = byte_while_waiting
+        self.has_preamble_started = False
+        self.is_past_preamble = False
+        self.recv_section_data = []
+        self.is_sending_section_preambled = True
+        self.curr_send = []
+        self.curr_recv = []
+
+    def get_result_section_preambled_transfer(self):
+        is_at_last = False
+        start_last = 0
+        while self.is_sending_section_preambled:
+            sleep_time = self.SLEEP_TIMER
+            sleep(sleep_time)
+            if len(self.recv_section_data) == (len(self.sending_section_data) - 1):
+                if not is_at_last:
+                    is_at_last = True
+                    start_last = datetime.datetime.now()
+                if (datetime.datetime.now() - start_last).total_seconds() >= self.TIMEOUT_TIMER:
+                    self.is_sending_section_preambled = False
+                    self.recv_section_data += [self.no_data_default]
+                    break
+        return self.recv_section_data[:]
+
     def update_data(self, data):
         with self.recv_mutex:
             self.curr_recv += [data]
         
     def get_send_data(self):
+        if self.is_device_master:
+            return None
         if len(self.curr_send) <= 0:
             return None
         out = self.curr_send[0]
         with self.send_mutex:
             self.curr_send = self.curr_send[1:]
         return out
+
+    def bgb_master_client_data_handler_section_preambled(self, data):
+        if (not self.has_preamble_started) and (data != self.preamble_byte):
+            return self.byte_while_waiting
+        if data == self.preamble_byte:
+            self.has_preamble_started = True
+        if (data == self.preamble_byte) and (not self.is_past_preamble):
+            return self.preamble_byte
+
+        self.is_past_preamble = True
+        with self.recv_mutex:
+            self.recv_section_data += [data]
+
+        if len(self.recv_section_data) == len(self.sending_section_data):
+            self.is_sending_section_preambled = False
+
+        if self.index_in_sending_section_data >= len(self.sending_section_data):
+            return self.no_data_default
+
+        out = self.sending_section_data[self.index_in_sending_section_data]
+        self.index_in_sending_section_data += 1
+        return out
         
     def bgb_master_client_data_handler(self, data):
-        if not self.is_bgb_master:
+        if not self.is_device_master:
             return None
+
+        if self.is_sending_section_preambled:
+            return self.bgb_master_client_data_handler_section_preambled(data)
+
+        if len(self.curr_send) <= 0:
+            return self.no_data_default
+
         self.update_data(data)
-        return None
+
+        out = self.curr_send[0]
+        with self.send_mutex:
+            self.curr_send = self.curr_send[1:]
+        return out
 
     # Code dependant on this connection method
     def sender(self, byte_to_send, num_bytes, turbo_transfer = False, **kwargs):
@@ -80,8 +159,9 @@ class PokeTrader:
             if self.fast:
                 sleep_time = self.SLEEP_TIMER_FAST
             sleep(sleep_time)
-            if (datetime.datetime.now() - start_time).total_seconds() >= self.TIMEOUT_TIMER:
-                break
+            if not self.is_device_master:
+                if (datetime.datetime.now() - start_time).total_seconds() >= self.TIMEOUT_TIMER:
+                    break
         num_to_transfer = num_bytes
         if len(self.curr_recv) < num_to_transfer:
             num_to_transfer = len(self.curr_recv)

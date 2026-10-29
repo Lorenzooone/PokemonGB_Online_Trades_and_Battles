@@ -3,6 +3,7 @@ import struct
 import select
 import timeit
 import threading
+import traceback
 from time import sleep
 from .gsc_trading_strings import GSCTradingStrings
 from .gsc_trading_data_utils import GSCUtilsMisc
@@ -10,6 +11,8 @@ from .gsc_trading_data_utils import GSCUtilsMisc
 # Implements the BGB link cable protocol
 # See https://bgb.bircd.org/bgblink.html
 # Base from: https://github.com/mwpenny/gbplay
+
+show_traceback = False
 
 class BGBLinkCableSender(threading.Thread):
     SLEEP_TIMER = 0.1
@@ -27,7 +30,7 @@ class BGBLinkCableSender(threading.Thread):
                 send_data = self._server.send_as_master()
                 if send_data:
                     self._connection.send(send_data)
-                if self._server.turbo_transfer:
+                if self._server.turbo_transfer and self._server.fast:
                     sleep_timer = BGBLinkCableSender.SLEEP_TIMER_TURBO
                 elif self._server.fast:
                     sleep_timer = BGBLinkCableSender.SLEEP_TIMER_FAST
@@ -37,6 +40,8 @@ class BGBLinkCableSender(threading.Thread):
                         
             except Exception as e:
                 print(GSCTradingStrings.socket_error_str, str(e))
+                if show_traceback:
+                    print(traceback.format_exc())
                 self._server.kill_function()
         
 
@@ -96,6 +101,8 @@ class BGBLinkCableServer(threading.Thread):
                 server.bind((self.host, self.port))
             except Exception as e:
                 print(GSCTradingStrings.socket_error_str, str(e))
+                if show_traceback:
+                    print(traceback.format_exc())
                 self.kill_function()
                     
             server.listen(1)  # One Game Boy to rule them all
@@ -143,6 +150,8 @@ class BGBLinkCableServer(threading.Thread):
                         
                 except Exception as e:
                     print(GSCTradingStrings.socket_error_str, str(e))
+                    if show_traceback:
+                        print(traceback.format_exc())
                     self.kill_function()
 
     def _handle_version(self, major, minor, patch):
@@ -175,7 +184,7 @@ class BGBLinkCableServer(threading.Thread):
             answer,     # Answered value
             0x80,       # Deprecated
             0,          # Deprecated
-            self._last_received_timestamp
+            self.get_timestamp_to_send()
         )
 
     def send_as_master(self):
