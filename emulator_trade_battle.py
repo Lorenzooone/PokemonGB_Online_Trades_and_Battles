@@ -24,7 +24,7 @@ class PokeTrader:
         self.fast = menu.fast_emu_conn
         self._server = BGBLinkCableServer(self.update_data, self.get_send_data, self.bgb_master_client_data_handler, menu, kill_function)
         self.connection = get_connection(menu, kill_function)
-        self.is_device_master = False
+        self.is_device_master = True # By default in BGB this being true makes the connection more stable...
         self.no_data_default = 0
         # Section sending mode
         self.is_sending_section_preambled = False
@@ -47,6 +47,7 @@ class PokeTrader:
         self.no_data_default = new
 
     def send_section_preambled(self, sending_data, preamble_byte, byte_while_waiting):
+        #https://github.com/pret/pokecrystal/blob/619f3703486b3b40f69d31b1911b58aa0a721a6e/home/serial.asm#L91
         self.sending_section_data = sending_data
         self.index_in_sending_section_data = 0
         self.preamble_byte = preamble_byte
@@ -73,6 +74,9 @@ class PokeTrader:
                     self.recv_section_data += [self.no_data_default]
                     break
         return self.recv_section_data[:]
+
+    def switch_master_of_connection(self, make_device_master):
+        self.is_device_master = make_device_master
 
     def update_data(self, data):
         with self.recv_mutex:

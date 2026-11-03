@@ -6,11 +6,11 @@ import sys
 # From: https://github.com/Squaresweets/TileWorldGBA
 max_packet_size_mb = 0x40
 
-def read_exact(receiver, num_bytes, max_retries=20):
+def read_exact(raw_receiver, num_bytes, max_retries=20):
     data = b''
     while len(data) < num_bytes and max_retries > 0:
         try:
-            chunk = receiver(num_bytes - len(data))
+            chunk = raw_receiver(num_bytes - len(data))
         except:
             chunk = b''
         if chunk is None or len(chunk) == 0:
@@ -19,13 +19,13 @@ def read_exact(receiver, num_bytes, max_retries=20):
         data += bytes(chunk)
     return data
 
-def read_all(receiver, debug=False):
+def read_all(raw_receiver, debug=False):
     time.sleep(0.01)
     output = 0
     prev_len = 0
     while True:
         try:
-            data = receiver()
+            data = raw_receiver()
             if len(data) == 0:
                 break
             output <<= (8 * len(data))
@@ -40,13 +40,13 @@ def read_all(receiver, debug=False):
         print("0x%02x " % output)
     return output
 
-def multiboot(receiver, sender, list_sender, path, reconfigure_function, requires_read_after_write):
+def multiboot(data_transmitter, path):
 
     def mb_read_exact(num_bytes, max_retries=20):
         data = b''
         while len(data) < num_bytes and max_retries > 0:
             try:
-                chunk = receiver(num_bytes - len(data))
+                chunk = data_transmitter.raw_receiver(num_bytes - len(data))
             except:
                 chunk = b''
             if chunk is None or len(chunk) == 0:
@@ -56,15 +56,15 @@ def multiboot(receiver, sender, list_sender, path, reconfigure_function, require
         return data
 
     def mb_send(data):
-        sender(data, 4)
-        if requires_read_after_write:
+        data_transmitter.sender(data, 4)
+        if data_transmitter.get_requires_read_after_write():
             mb_read_exact(4)
 
     def mb_transfer(data):
-        sender(data, 4)
-        if requires_read_after_write:
+        data_transmitter.sender(data, 4)
+        if data_transmitter.get_requires_read_after_write():
             return int.from_bytes(mb_read_exact(4), byteorder='big')
-        return read_all(receiver)
+        return read_all(data_transmitter.raw_receiver)
 
     content = 0
     print("Preparing data...")
@@ -104,8 +104,8 @@ def multiboot(receiver, sender, list_sender, path, reconfigure_function, require
         
     print("Data preloaded...")
     
-    read_all(receiver)
-    reconfigure_function(36, 4, list_sender, receiver)
+    read_all(data_transmitter.raw_receiver)
+    data_transmitter.reconfigure_fw_function(36, 4)
 
     recv = 0
     while True:
@@ -150,9 +150,9 @@ def multiboot(receiver, sender, list_sender, path, reconfigure_function, require
         
     time_transfer = time.time()
     list_post_transfer_function = None
-    if requires_read_after_write:
+    if data_transmitter.get_requires_read_after_write():
         list_post_transfer_function = mb_read_exact
-    list_sender(complete_sending_data, chunk_size = max_packet_size_mb, post_transfer_function = list_post_transfer_function)
+    data_transmitter.list_sender(complete_sending_data, chunk_size = max_packet_size_mb, post_transfer_function = list_post_transfer_function)
     time_transfer = time.time()-time_transfer
     print(time_transfer)
     
@@ -168,7 +168,7 @@ def multiboot(receiver, sender, list_sender, path, reconfigure_function, require
             crcC = (crcC >> 1) ^ 0xc37b
         tmp >>= 1
 
-    read_all(receiver)
+    read_all(data_transmitter.raw_receiver)
     mb_send(0x0065)
     while True:
         recv = mb_transfer(0x0065)
