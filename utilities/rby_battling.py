@@ -4,11 +4,17 @@ from .rby_trading_data_utils import RBYUtils, RBYChecks, RBYTradingData
 
 class RBYBattlingClientTransfers(RBYTradingClientTransfers):
     battle_full_transfer = "BFL1"
+    data_transmitter_info_transfer = "DTI1"
+    whois_p1_server_transfer = "WP11"
     reseed_server_transfer = "RSS1"
+    p1_random_transfer = "P1R1"
     transfer_sync_transfer = "TST1"
 
     possible_transfers = RBYTradingClientTransfers.possible_transfers
     possible_transfers[battle_full_transfer] = {1 + 0x271} # Counter + Sum of special_sections_len
+    possible_transfers[p1_random_transfer] = {1 + 10} # Counter + Random data
+    possible_transfers[data_transmitter_info_transfer] = {2} # Other client's capabilities and preferences when it comes to transmitting data
+    possible_transfers[whois_p1_server_transfer] = {1} # Decision on who is P1 from server (to be fair-er)
     possible_transfers[reseed_server_transfer] = {1} # ACK from server
     possible_transfers[transfer_sync_transfer] = {1} # ACK to/from other player that it is ready for transfer
 
@@ -31,8 +37,9 @@ class RBYBattling(GSCBattling):
     """
     Class which handles the trading process for the player.
     """
-    
+
     enter_room_states = [[0x01, 0x60, 0xD1, 0xD5], [{0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, set(range(0x60, 0x70))]]
+    enter_room_states_device_master = [[0x02, 0x60, 0xD1, 0xD5], [{0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, set(range(0x60, 0x70))]]
     start_trading_states = [[0x60, 0x60], [set(range(0x60, 0x70)), {0xFD}]]
     special_sections_len = [0xA, 0x1A2, 0xC5]
     special_sections_preamble_len = [7, 6, 3]

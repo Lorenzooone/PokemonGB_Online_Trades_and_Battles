@@ -616,7 +616,7 @@ class RSESPTrading(GSCTrading):
 
         return other_mon_processing.create_trading_data(self.special_sections_len)[0]
         
-    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None]):
+    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None], is_valid = True):
         """
         Handles exchanging with the device the data section which
         is needed in order to trade.

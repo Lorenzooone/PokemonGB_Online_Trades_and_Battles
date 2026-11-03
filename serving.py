@@ -4,6 +4,7 @@ import datetime
 import asyncio
 import websockets
 import threading
+from threading import Lock
 import signal
 import os
 import sys
@@ -318,7 +319,24 @@ class ServerSpecificTransfers:
         if not target_processer.is_random_data_present():
             target_processer.random_data = self.random_data
         return hll.prepare_send_data(random_transfer, target_processer.random_data)
-        
+
+    def handle_get_is_p1(self, hll, whois_p1_transfer, processer):
+        # Ensure the two match...
+        with processer.p1_request_mutex:
+            if (processer.is_p1 is None) and (processer.other.is_p1 is None):
+                rnd = Random()
+                rnd.seed()
+                processer.is_p1 = (rnd.randint(0, 100) & 1) == 1
+            if (processer.is_p1 is not None):
+                processer.other.is_p1 = not processer.is_p1
+            if (processer.other.is_p1 is not None):
+                processer.is_p1 = not processer.other.is_p1
+
+        out_val = 0
+        if processer.is_p1:
+            out_val = processer.battling_client_class.whois_p1_server_self_value
+
+        return hll.prepare_send_data(whois_p1_transfer, [out_val])
 
 class PoolTradeServer:
     """
@@ -850,6 +868,8 @@ class ProxyBattleLinkServer:
         self.room = room
         self.gen = gen
         self.random_data = False
+        self.p1_request_mutex = Lock()
+        self.is_p1 = None
         self.hll = HighLevelListener()
         self.hll.set_valid_transfers(self.battling_client_class.transfers_class.possible_transfers)
     
@@ -867,6 +887,10 @@ class ProxyBattleLinkServer:
                 elif request[1] == self.battling_client_class.transfers_class.random_data_transfer:
                     await self.own_ws.send(self.server_data.handle_get_random(self.hll, self.battling_client_class.transfers_class.random_data_transfer, processer=self))
                     processed = True
+                elif request[1] == self.battling_client_class.transfers_class.whois_p1_server_transfer:
+                    if (self.other is not None) and (self.other.other == self):
+                        await self.own_ws.send(self.server_data.handle_get_is_p1(self.hll, self.battling_client_class.transfers_class.whois_p1_server_transfer, self))
+                        processed = True
                 elif request[1] == self.battling_client_class.transfers_class.reseed_server_transfer:
                     self.server_data.prepare_random_data()
                     self.reset_random_data()

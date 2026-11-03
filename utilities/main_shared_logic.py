@@ -16,7 +16,7 @@ def start_logic(trade_c, menu, client_type):
     print(GSCTradingStrings.recap_str.format(gen=menu.gen, room=menu.room, recap_option_selected=GSCTradingStrings.get_recap_option_selected(menu)))
     if menu.is_battle:
         trade_c.player_trade(menu.buffered, client_type)
-    if menu.trade_type == GSCTradingStrings.two_player_trade_str:
+    elif menu.trade_type == GSCTradingStrings.two_player_trade_str:
         trade_c.player_trade(menu.buffered, client_type)
     elif menu.trade_type == GSCTradingStrings.pool_trade_str:
         trade_c.pool_trade(client_type)
@@ -36,6 +36,9 @@ def get_connection(menu, kill_function):
 
 def get_data_trader_class(data_transmitter, connection, menu, kill_function, pre_sleep = False):
     trade_c = None
+    menu.buffered = menu.buffered_trade
+    if menu.is_battle:
+        menu.buffered = menu.buffered_battle
     if menu.gen == 2:
         if menu.is_battle:
             if menu.japanese:

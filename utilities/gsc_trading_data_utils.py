@@ -424,7 +424,7 @@ class GSCUtils:
             checks.prepare_species_buffer()
 
             # Account for mail shenanigans
-            if raw.has_mail():
+            if raw.has_mail() and (raw.mail is not None):
                 from .text_conversions import PokemonNamesForGen
                 # Avoid patching a new newline and end of line in a converted korean mail...
                 if raw.mail.get_mail_language() == PokemonNamesForGen.KOREAN_LANGUAGE:
@@ -688,6 +688,9 @@ class GSCUtilsMisc:
             data += [0]
         GSCUtilsMisc.write_short_le(data, 0, short_data)
         return data
+
+    def invert_int_endianness(int_data):
+        return ((int_data >> 24) & 0xFF) | (((int_data >> 16) & 0xFF) << 8) | (((int_data >> 8) & 0xFF) << 16) | (((int_data >> 0) & 0xFF) << 24)
     
     def to_n_bytes_le(in_data, n_bytes):
         data = [0] * n_bytes
@@ -700,6 +703,12 @@ class GSCUtilsMisc:
         for i in range(n_bytes):
             out_data |= data[start + i]<<(8*i)
         return out_data
+
+    def calc_checksum_int_le(data):
+        checksum = 0
+        for i in range(len(data)):
+            checksum += data[i] << (8 * (i % 4))
+        return checksum & 0xFFFFFFFF
 
     def inc_byte(val):
         val += 1
@@ -1215,7 +1224,7 @@ class GSCTradingPokémonInfo:
     def is_text_equal(self, other, do_mail = True):
         if not (self.ot_name.values_equal(other.ot_name.values) and self.nickname.values_equal(other.nickname.values)):
             return False
-        if do_mail and self.has_mail():
+        if do_mail and self.has_mail() and (self.mail is not None):
             if not (self.mail.data_mail.values_equal(other.mail.data_mail.values) and self.mail.data_sender.values_equal(other.mail.data_sender.values)):
                 return False
         return True
@@ -1225,7 +1234,7 @@ class GSCTradingPokémonInfo:
     def apply_all_text_transforms_to_all(self, language):
         self.apply_all_text_transforms(self.ot_name, language)
         self.apply_all_text_transforms(self.nickname, language)
-        if self.has_mail():
+        if self.has_mail() and (self.mail is not None):
             self.apply_all_text_transforms(self.mail.data_mail, language, is_mail = True)
             self.apply_all_text_transforms(self.mail.data_sender, language, is_mail = True)
 
@@ -1389,14 +1398,14 @@ class GSCTradingPokémonInfo:
         relevant_lengths = self._precalced_lengths
         if not is_new_mail_data:
             relevant_lengths = self._precalced_lengths_old
-        if self.has_mail():
+        if self.has_mail() and (self.mail is not None):
             mail_sources = [self.mail.get_data_mail(is_new_mail_data = is_new_mail_data), self.mail.get_data_mail_sender()]
         else:
             mail_sources = [None, None]
         data = [0] * relevant_lengths[len(sources)+len(mail_sources)]
         for i in range(len(sources)):
             GSCUtilsMisc.copy_to_data(data, relevant_lengths[i], sources[i])
-        if self.has_mail():
+        if self.has_mail() and (self.mail is not None):
             for i in range(len(mail_sources)):
                 GSCUtilsMisc.copy_to_data(data, relevant_lengths[i+len(sources)], mail_sources[i])
         return data

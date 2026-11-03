@@ -41,6 +41,7 @@ class GSCTradingStrings:
     bgb_listening_str = 'Listening for bgb on {host}:{port}...'
     bgb_server_str = 'Received bgb connection from {host}:{port}'
     p2p_client_str = 'Connecting to {host}:{port}...'
+    device_master_synch_error_str = "Error! Device cannot be master with a synchronous trade!"
     socket_error_str = 'Socket error:'
     index_error_str = "Index error!"
     io_error_str = "I/O error({0}): {1}"
@@ -58,6 +59,7 @@ class GSCTradingStrings:
     buffered_sit_table_str = "Please sit at the table to send to the other player your {kind_ing} data."
     not_received_buffered_data_str = "\nThe other player has not sent their buffered data yet.\nStarting a {kind} in order to get your data, so the other player can use it."
     found_buffered_data_str = "\nFound the other player's data.\nStarting the {kind} and sending your data to them, if they don't have it yet."
+    not_yet_sent_buffered_data_str = "\nFound Player 1's data, but have not sent your Player 2 data to them yet.\nStarting a {kind} in order to get your data, so Player 1 can use it."
     recycle_data_str = "\nReusing the previously received data."
     choice_send_str = "\nSending your choice."
     choice_recv_str = "\nWaiting for the other player's choice..."
@@ -72,6 +74,9 @@ class GSCTradingStrings:
     waiting_synchro_str = "\nWaiting for the other player to be synchronized..."
     arrived_synchro_str = "\nThe other player arrived. Starting party information exchange..."
     transfer_to_hardware_str = "\rSection {index}: {completion}"
+    transfer_to_hardware_device_master_str = "Section {index}: Sent {length} bytes to hardware, waiting for completion..."
+    determine_buffered_str = "Determining type of {kind} by asking the other player..."
+    battle_player_num_str = "Starting battle as Player {player_num}..."
     incompatible_version_old_protocol_str = "\nThe other player is using an older release of the software.\nEither start a buffered trade instead, or have them update to a version newer than 4.1.0"
     restart_trade_str = "\nStarting a new {kind}."
     incompatible_trade_str = "\nIt looks like the requested trade is not possible.\nYou can't do a synchronous trade with the {language_one} version and the {language_two} version\nif at least one Pokémon is holding mail.\nEither do a Buffered trade, or remove the mail.\nShutting down..."
@@ -98,6 +103,9 @@ class GSCTradingStrings:
     battle_impossible_verify_opponent_moves_str = "Warning! Temporarily impossible to verify the moves used by the opponent!"
     battle_again_ossible_verify_opponent_moves_str = "It is now possible to verify the moves used by the opponent!"
     battle_synchronous_waiting_opponent_transfer_str = "Waiting for the other player to also start the transfer..."
+    battle_p1p2_waiting_random_transfer_str = "Waiting for Player 1 to send the RNG data..."
+    battle_no_p1p2_warning_str = "\nWARNING: Initiated battle with both players as Player 2.\nSome issues in turn order may arise!!!\n"
+    battle_waiting_opponent_in_battle_str = "Waiting for the other player to also reach the start of the battle..."
     battle_wait_press_enter_str = "Waiting {time} seconds before checking for the next user input...\nPress ENTER to skip the wait and instantly start checking for user input."
     battle_reading_user_input_str = "Now reading user input..."
     battle_no_data_str = "Player stopped sending data!\nClosing application!\nIf it is not expected, please report this as an issue!"
@@ -153,24 +161,25 @@ class GSCTradingStrings:
                         "tdpn) {trade_default_pokemon_names_str}\n"
                         "tdtn) {trade_default_trainer_names_str}\n"
                         "\n=============== 2-Player trade/battle Options ===============\n"
-                        "7) Change to {other_buffered} Trading/Battle (Current: {own_buffered})\n"
-                        "8) {kill_on_byte_drops_str}\n"
+                        "7) Change to {other_buffered} Trading (Current: {own_buffered})\n"
+                        "8) Change to {other_buffered_btl} Battle (Current: {own_buffered_btl})\n"
+                        "9) {kill_on_byte_drops_str}\n"
                         "{battle_default_pokemon_names_str}"
                         "{battle_default_trainer_names_str}"
                         "{battle_turn_time_str}"
                         "\n=============== Pools trade Options ===============\n"
-                        "9) Set Max Level (Current: {max_level})"
+                        "10) Set Max Level (Current: {max_level})"
                         "{gen_2_eggify_str}"
                         "{emulator_str}"
                         )
-    gen_2_eggify_str = ("\n10) {egg_str}")
+    gen_2_eggify_str = ("\n11) {egg_str}")
     battle_turn_time_option_str = ("btt) Time between turns: {battle_turn_time}\n")
     battle_default_pokemon_names_option_str = ("bdpn) {battle_default_pokemon_names_str}\n")
     battle_default_trainer_names_option_str = ("bdtn) {battle_default_trainer_names_str}\n")
     emulator_options_str = ("\n\n=============== Emulator Options ===============\n"
-                            "11) Host for emulator connection: {emulator_host}\n"
-                            "12) Port for emulator connection: {emulator_port}\n"
-                            "13) {efc_str}"
+                            "12) Host for emulator connection: {emulator_host}\n"
+                            "13) Port for emulator connection: {emulator_port}\n"
+                            "14) {efc_str}"
                             )
     
     def int_to_three_str(integer):
@@ -294,8 +303,10 @@ class GSCTradingStrings:
                                                      japanese_str=GSCTradingStrings.get_japanese_str(options.japanese),
                                                      sanity_checks_str=GSCTradingStrings.get_sanity_checks_str(options.do_sanity_checks),
                                                      verbose=options.verbose,
-                                                     other_buffered=GSCTradingStrings.get_buffered_str(not options.buffered),
-                                                     own_buffered=GSCTradingStrings.get_buffered_str(options.buffered),
+                                                     other_buffered=GSCTradingStrings.get_buffered_str(not options.buffered_trade),
+                                                     own_buffered=GSCTradingStrings.get_buffered_str(options.buffered_trade),
+                                                     other_buffered_btl=GSCTradingStrings.get_buffered_str(not options.buffered_battle),
+                                                     own_buffered_btl=GSCTradingStrings.get_buffered_str(options.buffered_battle),
                                                      kill_on_byte_drops_str=GSCTradingStrings.get_kill_on_byte_drops_str(options.kill_on_byte_drops),
                                                      emulator_str = GSCTradingStrings.get_emulator_str(options),
                                                      max_level = options.max_level,
@@ -356,6 +367,12 @@ class GSCTradingStrings:
 
     def get_different_language_trade_str(language_old, language_new):
         return GSCTradingStrings.different_language_trade_str.format(language_one = GSCTradingStrings.get_language_str(language_old), language_two = GSCTradingStrings.get_language_str(language_new))
+
+    def get_battle_player_num_str(is_device_master):
+        player_num = 2
+        if is_device_master:
+            player_num = 1
+        return GSCTradingStrings.battle_player_num_str.format(player_num = str(player_num))
 
     def choice_print():
         print(GSCTradingStrings.action_str, end='')

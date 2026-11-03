@@ -45,6 +45,6 @@ class GSCBattlingJP(GSCBattling):
         end_of_gsc_data_pos + 2 + (single_text_len * 11): [pokemon_name_len_diff - 2, end_of_line],
     }, {}, {}, {}]
     drop_bytes_checks = [[0xA, 0x1B9, 0xC5], [next_section, next_section, no_input], [0,4,0]]
-    
+
     def __init__(self, data_transmitter, connection, menu, kill_function, pre_sleep):
         super(GSCBattlingJP, self).__init__(data_transmitter, connection, menu, kill_function, pre_sleep)

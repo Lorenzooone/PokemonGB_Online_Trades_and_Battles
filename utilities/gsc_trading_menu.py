@@ -21,7 +21,8 @@ class GSCTradingMenu:
         
         # Initialize the menu
         self.server = [args.server_host, args.server_port, args.server_ssl]
-        self.buffered = args.buffered
+        self.buffered_trade = args.buffered_trade
+        self.buffered_battle = args.buffered_battle
         self.japanese = args.japanese
         self.max_level = args.max_level
         self.egg = args.egg
@@ -73,10 +74,11 @@ class GSCTradingMenu:
             "4": self.handle_language_option,
             "5": self.handle_sanity_option,
             "6": self.handle_verbose_option,
-            "7": self.handle_buffered_option,
-            "8": self.handle_kill_on_byte_drop_option,
-            "9": self.handle_max_level_option,
-            "10": self.handle_eggs_option,
+            "7": self.handle_buffered_trade_option,
+            "8": self.handle_buffered_battle_option,
+            "9": self.handle_kill_on_byte_drop_option,
+            "10": self.handle_max_level_option,
+            "11": self.handle_eggs_option,
             "btt": self.handle_battle_turn_time_option,
             "tdpn": self.handle_trade_default_pokemon_names,
             "bdpn": self.handle_battle_default_pokemon_names,
@@ -86,9 +88,9 @@ class GSCTradingMenu:
             "ssl": self.handle_ssl_connection,
             }
         if is_emulator:
-            self.options_menu_handlers["11"] = self.handle_emulator_host_option
-            self.options_menu_handlers["12"] = self.handle_emulator_port_option
-            self.options_menu_handlers["13"] = self.handle_fast_emu_conn_option
+            self.options_menu_handlers["12"] = self.handle_emulator_host_option
+            self.options_menu_handlers["13"] = self.handle_emulator_port_option
+            self.options_menu_handlers["14"] = self.handle_fast_emu_conn_option
 
     def get_int(self, default_value):
         x = input()
@@ -260,8 +262,12 @@ class GSCTradingMenu:
         self.fast_emu_conn = not self.fast_emu_conn
         return False
     
-    def handle_buffered_option(self):
-        self.buffered = not self.buffered
+    def handle_buffered_trade_option(self):
+        self.buffered_trade = not self.buffered_trade
+        return False
+    
+    def handle_buffered_battle_option(self):
+        self.buffered_battle = not self.buffered_battle
         return False
     
     def handle_max_level_option(self):
@@ -347,9 +353,12 @@ class GSCTradingMenu:
                             help="trade type (" + GSCTradingStrings.two_player_trade_str + " = 2-Player Trade, " + GSCTradingStrings.pool_trade_str + " = Pool Trade)")
         parser.add_argument("-r", "--room", dest="room", default = None,
                             help="2-Player Trade's room", type=int)
-        parser.add_argument("-b", "--buffered",
-                            action="store_true", dest="buffered", default=False,
+        parser.add_argument("-btr", "--buffered_trade",
+                            action="store_true", dest="buffered_trade", default=False,
                             help="default to buffered trading instead of synchronous")
+        parser.add_argument("-sbt", "--synch_battle",
+                            action="store_false", dest="buffered_battle", default=True,
+                            help="default to synchronous battling instead of buffered")
         parser.add_argument("-j", "--japanese",
                             action="store_true", dest="japanese", default=False,
                             help="use it if your game is Japanese")
@@ -422,7 +431,7 @@ class GSCBufferedNegotiator(threading.Thread):
             self.sleep_func()
             received = fun()
         return received
-        
+
     def choose_if_buffered(self):
         buffered = self.buffered
         self.comms.send_buffered_data(buffered)

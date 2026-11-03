@@ -96,6 +96,7 @@ class RBYTrading(GSCTrading):
     """
     
     enter_room_states = [[0x01, 0x60, 0xD0, 0xD4], [{0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}]]
+    enter_room_states_device_master = [[0x02, 0x60, 0xD0, 0xD4], [{0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0xD0, 0xD1, 0xD2, 0xD3, 0xD4}, {0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}]]
     start_trading_states = [[0x60, 0x60], [{0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6F}, {0xFD}]]
     special_sections_len = [0xA, 0x1A2, 0xC5]
     special_sections_preamble_len = [7, 6, 3]
@@ -155,7 +156,7 @@ class RBYTrading(GSCTrading):
     def get_language_family_suggestion_str(self, language_family_own, language_family_other):
         return GSCTradingStrings.suggest_trade_language_gen1_str.format(language_one = GSCTradingStrings.get_language_family_to_str(language_family_own), language_two = GSCTradingStrings.get_language_family_to_str(language_family_other))
 
-    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None]):
+    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None], is_valid = True):
         """
         Handles exchanging with the device the three data sections which
         are needed in order to trade.
@@ -170,7 +171,8 @@ class RBYTrading(GSCTrading):
         just_sent = None
 
         while not self.is_version_check_done:
-            self.swap_byte(self.no_input)
+            if not self.data_transmitter.is_device_master:
+                self.swap_byte(self.no_input)
             self.sleep_func()
         if self.server_version is not None:
             send_data[0] = self.force_receive(self.comms.get_random)

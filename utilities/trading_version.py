@@ -5,8 +5,8 @@ class TradingVersion:
 
     # Changes each protocol change
     version_major = 5
-    version_minor = 0
-    version_build = 1
+    version_minor = 1
+    version_build = 0
 
     # Fixed, does not change
     first_battle_version_major = 4

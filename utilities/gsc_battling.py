@@ -17,11 +17,17 @@ def wait_enter_pressed(ask_str, max_time_s):
 
 class GSCBattlingClientTransfers(GSCTradingClientTransfers):
     battle_full_transfer = "BFL2"
+    data_transmitter_info_transfer = "DTI2"
+    whois_p1_server_transfer = "WP12"
+    p1_random_transfer = "P1R2"
     reseed_server_transfer = "RSS2"
     transfer_sync_transfer = "TST2"
 
     possible_transfers = GSCTradingClientTransfers.possible_transfers
     possible_transfers[battle_full_transfer] = {1 + 0x40C, 1 + 0x4CC} # Counter + Sum of special_sections_len - Ver 4.0, 5.0
+    possible_transfers[p1_random_transfer] = {1 + 10} # Counter + Random data
+    possible_transfers[data_transmitter_info_transfer] = {2} # Other client's capabilities and preferences when it comes to transmitting data
+    possible_transfers[whois_p1_server_transfer] = {1} # Decision on who is P1 from server (to be fair-er)
     possible_transfers[reseed_server_transfer] = {1} # ACK from server
     possible_transfers[transfer_sync_transfer] = {1} # ACK to/from other player that it is ready for transfer
 
@@ -33,9 +39,15 @@ class GSCBattlingClient(GSCTradingClient):
     """
     base_folder = "useful_data/gsc/"
     transfers_class = GSCBattlingClientTransfers
+    can_do_device_master_value = 0x17
+    cannot_do_device_master_value = 0x46
+    prefers_device_master_value = 0x68
+    no_preference_device_master_value = 0x12
+    whois_p1_server_self_value = 0x49
 
     def __init__(self, trader, connection, verbose, stop_trade, party_reader, base_no_trade = base_folder + "base_battle.bin", base_pool = base_folder + "base_pool.bin"):
         super(GSCBattlingClient, self).__init__(trader, connection, verbose, stop_trade, party_reader, base_no_trade=base_no_trade, base_pool=base_pool)
+        self.stored_trading_data = None
 
     def is_opponent_choice_valid(self, opp_choice):
         if self.trader.is_choice_stop(opp_choice):
@@ -142,12 +154,100 @@ class GSCBattlingClient(GSCTradingClient):
         self.connection.reset_send(self.transfers_class.transfer_sync_transfer)
         self.connection.reset_recv(self.transfers_class.transfer_sync_transfer)
 
+    def send_data_transmitter_info(self, can_do_device_master, does_prefer_device_master):
+        """
+        Send this player's capabilities when it comes to device or program being master.
+        """
+        if can_do_device_master:
+            can_do_device_master = self.can_do_device_master_value
+        else:
+            can_do_device_master = self.cannot_do_device_master_value
+        if does_prefer_device_master:
+            does_prefer_device_master = self.prefers_device_master_value
+        else:
+            does_prefer_device_master = self.no_preference_device_master_value
+        out = [can_do_device_master, does_prefer_device_master]
+        self.connection.send_data(self.transfers_class.data_transmitter_info_transfer, out)
+
+    def get_data_transmitter_info(self):
+        """
+        Get the other player's capabilities when it comes to device or program being master.
+        """
+        val = self.connection.recv_data(self.transfers_class.data_transmitter_info_transfer)
+        if val is None:
+            return val
+        val_one = False
+        if val[0] == self.can_do_device_master_value:
+            val_one = True
+        val_two = False
+        if val[1] == self.prefers_device_master_value:
+            val_two = True
+        return [val_one, val_two]
+
+    def get_who_is_p1(self):
+        """
+        Get whether this player is going to be P1 or not.
+        """
+        val = self.connection.recv_data(self.transfers_class.whois_p1_server_transfer)
+        if val is None:
+            return val
+        return val[0] == self.whois_p1_server_self_value
+
+    def get_p1_random_data(self):
+        """
+        Get Player 1's random data.
+        """
+        return self.get_with_counter(self.transfers_class.p1_random_transfer)
+
+    def send_p1_random_data(self, data):
+        """
+        Send Player 1's random data.
+        """
+        self.send_with_counter(self.transfers_class.p1_random_transfer, data)
+    
+    def reset_p1_random_data_transfer(self):
+        """
+        Make it so if we need to resend stuff, the random data is not stale.
+        """
+        self.connection.reset_send(self.transfers_class.p1_random_transfer)
+        self.connection.reset_recv(self.transfers_class.p1_random_transfer)
+
+    def manipulate_received_big_trading_data(self, data):
+        """
+        Returns the data if it can be properly used.
+        There are cases where that is not a possibility.
+        Used to avoid having to recreate get_big_trading_data.
+        """
+        if data is None:
+            if (self.stored_trading_data is not None) and self.trader.is_p1p2_battle_mode and (not self.trader.data_transmitter.is_device_master):
+                data = self.stored_trading_data
+                self.stored_trading_data = None
+            return data
+
+        # Send the data before using the one of Player 1, since
+        # Player 1 will be the one with the RNG stuff.
+        # There is an order that MUST be followed in P1-P2 mode.
+        if self.trader.is_p1p2_battle_mode and (not self.trader.data_transmitter.is_device_master) and (not self.has_sent_big_trading_data):
+            self.verbose_print(GSCTradingStrings.not_yet_sent_buffered_data_str.format(kind=GSCTradingStrings.get_kind_str(self.trader.menu.is_battle)))
+            self.stored_trading_data = data
+            return None
+
+        return data
+
+    def reset_big_trading_data(self):
+        """
+        Make it so if we need to resend stuff, the buffers are clean.
+        """
+        super().reset_big_trading_data()
+        self.stored_trading_data = None
+
 class GSCBattling(GSCTrading):
     """
     Class which handles the trading process for the player.
     """
     
     enter_room_states = [[0x01, 0x61, 0xD2, 0, 0xFE], [{0x61}, {0xD2}, {0}, {0xFE}, {0xFE}]]
+    enter_room_states_device_master = [[0x02, 0x61, 0xD2, 0, 0xFE], [{0x61}, {0xD2}, {0}, {0, 0x85}, {0, 0x85}]]
     start_trading_states = [[0x85, 0x85, 0x86], [{0x85}, {0}, {0xFD}]]
     special_sections_len = [0xA, 0x1BC, 0xC5]
     special_sections_preamble_len = [7, 6, 3]
@@ -451,7 +551,20 @@ class GSCBattling(GSCTrading):
         if not self.could_battle_have_ended(sent_choice, received_choice):
             return False
         next = self.no_input
-        next = self.timed_wait_for_set_of_values(next, self.get_battle_end_start_trading_states())
+        start_time = datetime.datetime.now()
+        timeout_battle_restart = 1.0
+        if self.data_transmitter.is_device_master:
+            # This could be lower, but BGB can be a pain...
+            timeout_battle_restart = 2.5
+        next = self.timed_wait_for_set_of_values(next, self.get_battle_end_start_trading_states(), timeout = timeout_battle_restart)
+        time_taken = (datetime.datetime.now() - start_time).total_seconds()
+        if self.data_transmitter.is_device_master and (time_taken > (timeout_battle_restart + 0.5)):
+            # Basically, just error out when it is detected
+            # that the routine got stuck waiting for input...
+            # Without this, there is a risk of wrongfully
+            # detecting a battle has ended.
+            print(time_taken)
+            next = self.no_input
         return next in self.get_battle_end_start_trading_states()
 
     def get_battle_end_start_trading_states(self):
@@ -469,7 +582,7 @@ class GSCBattling(GSCTrading):
         while(next != target):
             next = self.swap_byte(self.stop_battle)
         
-    def battle_starting_sequence(self, buffered, send_data = [None, None, None]):
+    def battle_starting_sequence(self, buffered, send_data = [None, None, None], is_valid = True):
         """
         Handles exchanging with the device the three data sections which
         are needed in order to battle.
@@ -480,13 +593,19 @@ class GSCBattling(GSCTrading):
         # Send and get the first two sections
         just_sent = None
         while not self.is_version_check_done:
-            self.swap_byte(self.no_input)
+            if not self.data_transmitter.is_device_master:
+                self.swap_byte(self.no_input)
             self.sleep_func()
         if not buffered:
             self.comms.send_transfer_sync_transfer()
             self.verbose_print(GSCTradingStrings.battle_synchronous_waiting_opponent_transfer_str)
             self.force_receive(self.comms.get_transfer_sync_transfer)
-        send_data[0] = self.force_receive(self.comms.get_random)
+
+        if is_valid and self.is_p1p2_battle_mode and (not self.data_transmitter.is_device_master):
+            self.verbose_print(GSCTradingStrings.battle_p1p2_waiting_random_transfer_str)
+            send_data[0] = self.force_receive(self.comms.get_p1_random_data)
+        else:
+            send_data[0] = self.force_receive(self.comms.get_random)
         self.last_random = send_data[0]
 
         # Testing time...
@@ -500,6 +619,12 @@ class GSCBattling(GSCTrading):
         #send_data = pokemon_base.create_trading_data(self.special_sections_len)
 
         random_data, random_data_other, just_sent = self.read_section(0, send_data[0], True, just_sent, 0)
+
+        # Send the random data to the other player asap, so the battle may start as soon as possible
+        if is_valid and self.is_p1p2_battle_mode and self.data_transmitter.is_device_master:
+            self.last_random = random_data
+            self.comms.send_p1_random_data(self.last_random)
+            
         pokemon_data, pokemon_data_other, just_sent = self.read_section(1, send_data[1], buffered, just_sent, 0)
         # Get and apply patches for the Pokémon data
         patches_data, patches_data_other, just_sent = self.read_section(2, send_data[2], buffered, just_sent, 1)
@@ -514,13 +639,21 @@ class GSCBattling(GSCTrading):
         
         return [random_data, pokemon_data, None], [random_data_other, pokemon_data_other, None]
     
-    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None]):
+    def trade_starting_sequence(self, buffered, send_data = [None, None, None, None], is_valid = True):
         # Abuse classes to avoid writing duplicated code...
-        return self.battle_starting_sequence(buffered, send_data = [send_data[0], send_data[1], send_data[2]])
+        return self.battle_starting_sequence(buffered, send_data = [send_data[0], send_data[1], send_data[2]], is_valid = is_valid)
 
     def post_buffered_negotiation_init(self):
-        self.force_receive(self.comms.get_reseed_server)
+        self.attempt_receive(self.comms.get_reseed_server, -1, do_swap_byte = False)
         self.do_version_check()
+        self.other_data_trasmitter_can_device_master = None
+        self.other_data_trasmitter_prefers_device_master = None
+        if TradingVersion.is_version_greater_equal_than(self.other_client_version, 5, 1, 0):
+            out = self.attempt_receive(self.comms.get_data_transmitter_info, 5, do_swap_byte = False)
+            if out is not None:
+                self.other_data_trasmitter_can_device_master = out[0]
+                self.other_data_trasmitter_prefers_device_master = out[1]
+        self.is_device_info_check_done = True
 
     def get_language_family_suggestion_str(self, language_family_own, language_family_other):
         return None
@@ -551,9 +684,9 @@ class GSCBattling(GSCTrading):
             time_to_wait = self.get_lock_swap_remaining_time()
             if self.is_lock_swap_stopped():
                 time_to_wait = self.menu.time_between_battle_turns
-                if self.can_drop_commands:
+                if self.can_drop_commands and (not self.data_transmitter.is_device_master):
                     self.start_lock_swap(time_to_wait)
-            if not self.can_drop_commands:
+            if (not self.can_drop_commands) or self.data_transmitter.is_device_master:
                 time_to_wait = 0
             wait_enter_pressed(GSCTradingStrings.battle_wait_press_enter_str.format(time=int(round(time_to_wait))), time_to_wait)
             self.stop_lock_swap()
@@ -611,7 +744,7 @@ class GSCBattling(GSCTrading):
 
                 # Get confirmation that the input was processed by the interrupt
                 next = self.wait_for_no_data(next, received_choice, limit_resends=self.resends_limit_trade)
-                if(next == self.no_data):
+                if(next == self.no_data) and (not self.data_transmitter.is_device_master):
                     next = self.timed_wait_for_no_input(next)
 
                 self.update_battle_information(sent_choice, received_choice)
@@ -635,13 +768,42 @@ class GSCBattling(GSCTrading):
                     # win, loss, or draw.
                     next = self.swap_byte(received_choice)
                     next = self.wait_for_no_data(next, received_choice, limit_resends=self.resends_limit_trade)
-                    if(next == self.no_data):
+                    if(next == self.no_data) and (not self.data_transmitter.is_device_master):
                         next = self.wait_for_no_input(next)
                     battle_completed = True
                     self.exit_or_new = True
                     self.verbose_print(GSCTradingStrings.close_str.format(kind=self.kind_str))
 
         return
+
+    def determine_player1_buffered_battle(self):
+        """
+        Determines whether this will be a P1-P2 battle, and if so who
+        should be P1 and who should be P2.
+        """
+        while not self.is_device_info_check_done:
+            self.sleep_func()
+        # Check if the version check even returned anything...
+        if (self.other_data_trasmitter_can_device_master is None) or (self.other_data_trasmitter_prefers_device_master is None):
+            return
+        # Check if any of the players can act as P1...
+        if (not self.other_data_trasmitter_can_device_master) and (not self.data_transmitter.can_device_be_master()):
+            return
+
+        # At least one can act as P1, confirm the new battle type.
+        self.is_p1p2_battle_mode = True
+
+        # If only one can act as P1, the choice is easy...
+        if self.other_data_trasmitter_can_device_master != self.data_transmitter.can_device_be_master():
+            self.data_transmitter.switch_master_of_connection(self.data_transmitter.can_device_be_master())
+            return
+
+        # If only one prefers acting as P1, the choice is easy...
+        if self.other_data_trasmitter_prefers_device_master != self.data_transmitter.is_device_master:
+            return
+
+        # Both want to be P1 or don't care about it, now assign it via server.
+        self.data_transmitter.switch_master_of_connection(self.attempt_receive(self.comms.get_who_is_p1, -1, do_swap_byte = False))
 
     def player_battle(self, buffered, client_type):
         """
@@ -658,20 +820,41 @@ class GSCBattling(GSCTrading):
         self.exit_or_new = True
         #buffered = False # Force non-buffered for now...
         self.is_version_check_done = False
+        self.is_device_info_check_done = False
         self.comms.send_client_version()
         self.comms.send_language_data()
         self.comms.send_client_type_data(client_type)
+        self.comms.send_data_transmitter_info(self.data_transmitter.can_device_be_master(), self.data_transmitter.is_device_master)
         buf_neg = GSCBufferedNegotiator(self.menu, self.comms, buffered, self.sleep_func, self.post_buffered_negotiation_init, is_battle = True)
         buf_neg.start()
+
+        # This NEEDS to be checked before entering the room...
+        # Both modes are available when the program is the Master, but
+        # only buffered works reliably over the network with
+        # the device as Master. Not only that, if buffered, do P1-P2 battles.
+        self.verbose_print(GSCTradingStrings.determine_buffered_str.format(kind=GSCTradingStrings.get_kind_str(self.menu.is_battle)))
+        buffered = self.attempt_receive(buf_neg.get_chosen_buffered, -1, do_swap_byte = False)
+        self.is_p1p2_battle_mode = False
+
+        if not buffered:
+            # Only P2s if not buffered...
+            self.data_transmitter.switch_master_of_connection(False)
+        else:
+            # Determine P1 (if any)
+            self.determine_player1_buffered_battle()
+
+        self.verbose_print(GSCTradingStrings.get_battle_player_num_str(self.data_transmitter.is_device_master))
+
+        if not self.is_p1p2_battle_mode:
+            self.verbose_print(GSCTradingStrings.battle_no_p1p2_warning_str)
+
         # Start of what the player sees. Enters the room
         self.enter_room()
         while True:
-            # Wait for the player to sit to the table
+            # Wait for the player to sit at the table
             if not self.sit_to_table(initial_sending=self.initial_sit_position):
                 break
 
-            # Start a normal transfer
-            buffered = self.force_receive(buf_neg.get_chosen_buffered)
             if buffered:
                 valid = self.buffered_trade()
             else:
@@ -680,13 +863,17 @@ class GSCBattling(GSCTrading):
             self.own_blank_trade = True
             self.other_blank_trade = True
             if valid:
-                if self.can_drop_commands:
+                if self.can_drop_commands and (not self.data_transmitter.is_device_master):
                     self.start_lock_swap(self.menu.time_between_battle_turns)
                 self.comms.send_big_battle_trading_data(self.create_sendable_big_trading_data(), self.last_random)
+
+                # Ensure the entire data matches...
+                self.verbose_print(GSCTradingStrings.battle_waiting_opponent_in_battle_str)
                 other_pokemon_final_full_data = self.force_receive(self.comms.get_big_battle_trading_data, self.get_big_trading_data_recv_lengths())
                 other_pokemon_final_data = other_pokemon_final_full_data[1]
                 self.utils_class.apply_patches(other_pokemon_final_data, other_pokemon_final_full_data[2], self.utils_class)
                 other_pokemon_final = self.party_reader(other_pokemon_final_data)
+
                 success = True
                 if self.last_random != other_pokemon_final_full_data[0]:
                     success = False
@@ -702,11 +889,18 @@ class GSCBattling(GSCTrading):
                     if not buffered:
                         print(GSCTradingStrings.buffered_suggestion_str.format(kind=self.kind_str))
                     break
+
+                # Reset big trading data here, since both are already in-battle.
+                # This ensures next time it will be re-read...
+                self.comms.reset_big_trading_data()
+                # Reset the Player 1 random data so next time it will be re-read...
+                if self.is_p1p2_battle_mode:
+                    self.comms.reset_p1_random_data_transfer()
+
             # Start interacting with the trading menu
             self.do_battle(self.comms.get_chosen_option, close=not valid)
             self.stop_lock_swap()
             if valid:
-                self.comms.reset_big_trading_data()
                 self.reset_trade()
                 self.force_receive(self.comms.get_reseed_server)
 
